@@ -17,7 +17,4 @@ jobs:
                   node-version: lts/*
                   cache: 'npm'
             - run: npm ci
-            - run: npm run build
-            - run: npm run ci:prettier
-            - run: npm run test:ut
-            - run: npm run test:it
+            - run: npm run verify

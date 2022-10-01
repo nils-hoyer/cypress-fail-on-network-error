@@ -1,6 +1,4 @@
 import * as chai from 'chai';
-import { AssertionError } from 'chai';
-import { EOL } from 'os';
 import sinonChai from 'sinon-chai';
 import typeDetect from 'type-detect';
 import { Config } from './types/Config';
@@ -23,6 +21,16 @@ export default function failOnConsoleError(_config: Config = {}) {
     };
 
     setConfig(_config);
+
+    Cypress.on('uncaught:exception', (err, runnable) => {
+        // returning false here prevents Cypress from
+        // failing the test
+        // throw new AssertionError(
+        //     `test'
+        //     )}`
+        // );
+        return true;
+    });
 
     Cypress.on('request:event', async (eventName, event) => {
         const __subscribedEvents = [
@@ -76,11 +84,11 @@ export default function failOnConsoleError(_config: Config = {}) {
         );
 
         if (requestIncluded) {
-            throw new AssertionError(
-                `cypress-fail-on-network-request: ${EOL} ${JSON.stringify(
-                    requestIncluded
-                )}`
-            );
+            // throw new AssertionError(
+            //     `cypress-fail-on-network-request: ${EOL} ${JSON.stringify(
+            //         requestIncluded
+            //     )}`
+            // );
         }
     });
 
@@ -99,11 +107,11 @@ export default function failOnConsoleError(_config: Config = {}) {
     // alternatic mit after(() => {}) umstellen
     Cypress.on('command:end', () => {
         // wird gegebenenfalls niemand true wenn requests empty ist
-        const requestsDone = () =>
-            Array.from(requests.values()).every(
-                (request: RequestSession) => request.status !== undefined
-            );
-        cy.wrap(waitUntil(requestsDone), { timeout: config.timeout });
+        // const requestsDone = () =>
+        //     Array.from(requests.values()).every(
+        //         (request: RequestSession) => request.status !== undefined
+        //     );
+        // cy.wrap(waitUntil(requestsDone), { timeout: config.timeout });
 
         setConfig(originConfig as Config);
         requests = new Map();

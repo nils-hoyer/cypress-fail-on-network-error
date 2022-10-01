@@ -75,8 +75,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.mapToRequest = exports.createConfig = exports.validateConfig = void 0;
 var chai = __importStar(require("chai"));
-var chai_1 = require("chai");
-var os_1 = require("os");
 var sinon_chai_1 = __importDefault(require("sinon-chai"));
 var type_detect_1 = __importDefault(require("type-detect"));
 chai.should();
@@ -94,6 +92,15 @@ function failOnConsoleError(_config) {
         originConfig = originConfig !== null && originConfig !== void 0 ? originConfig : __assign({}, config);
     };
     setConfig(_config);
+    Cypress.on('uncaught:exception', function (err, runnable) {
+        // returning false here prevents Cypress from
+        // failing the test
+        // throw new AssertionError(
+        //     `test'
+        //     )}`
+        // );
+        return true;
+    });
     Cypress.on('request:event', function (eventName, event) { return __awaiter(_this, void 0, void 0, function () {
         var __subscribedEvents, __unknownResponse, requestsDone, requestIncluded;
         return __generator(this, function (_a) {
@@ -134,7 +141,11 @@ function failOnConsoleError(_config) {
                 return !isExcludedRequest;
             });
             if (requestIncluded) {
-                throw new chai_1.AssertionError("cypress-fail-on-network-request: ".concat(os_1.EOL, " ").concat(JSON.stringify(requestIncluded)));
+                // throw new AssertionError(
+                //     `cypress-fail-on-network-request: ${EOL} ${JSON.stringify(
+                //         requestIncluded
+                //     )}`
+                // );
             }
             return [2 /*return*/];
         });
@@ -148,11 +159,15 @@ function failOnConsoleError(_config) {
     //         );
     //     cy.wrap(waitUntil(requestsDone), { timeout: config.timeout });
     // });
+    // hier sollte die matching logik noch mal ausgeführt werden
+    // alternatic mit after(() => {}) umstellen
     Cypress.on('command:end', function () {
-        var requestsDone = function () {
-            return Array.from(requests.values()).every(function (request) { return request.status !== undefined; });
-        };
-        cy.wrap(waitUntil(requestsDone), { timeout: config.timeout });
+        // wird gegebenenfalls niemand true wenn requests empty ist
+        // const requestsDone = () =>
+        //     Array.from(requests.values()).every(
+        //         (request: RequestSession) => request.status !== undefined
+        //     );
+        // cy.wrap(waitUntil(requestsDone), { timeout: config.timeout });
         setConfig(originConfig);
         requests = new Map();
     });

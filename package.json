@@ -8,14 +8,19 @@
     "dist/**/*"
   ],
   "scripts": {
-    "build": "npx rimraf dist/ && tsc",
+    "build:fe": "npx rimraf dist/ && tsc",
+    "build:be": "node ./backend/app.js",
+    "dev": "npm run dev:fe & npm run dev:be",
+    "dev:fe": "nodemon --watch './src' --ext 'ts' --exec 'npm run build:fe'",
+    "dev:be": "nodemon --watch './backend/app.js' --ext 'js' --exec 'npm run build:be'",
     "prettier": "prettier --write \"**/*\"",
+    "prettier:check": "prettier --check \"**/*\"",
     "lint": "tsc --noEmit && tsc -p ./test/tsconfig.json && tsc -p ./cypress/tsconfig.json",
     "test": "npm run test:ut && npm run test:it",
     "test:ut": "ts-mocha test/unitTest.ts",
     "test:it": "ts-mocha test/integrationTest.ts --timeout 60000",
-    "verify": "npm run build && npm run lint && npm run ci:prettier && npm run test",
-    "ci:prettier": "prettier --check \"**/*\""
+    "verify": "npm run build:fe && npm run build:be && npm run lint && npm run prettier:check && npm run test"
+
   },
   "repository": {
     "type": "git",
