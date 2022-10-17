@@ -1,7 +1,7 @@
 import { defineConfig } from 'cypress';
 
 export default defineConfig({
-    e2e: {
-        chromeWebSecurity: false,
-    },
+    screenshotOnRunFailure: false,
+    video: false,
+    e2e: {},
 });

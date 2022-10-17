@@ -1,4 +1,4 @@
-describe('shouldResetBetweenTests', () => {
+describe('shouldResetConfigBetweenTests', () => {
     beforeEach(() => {
         cy.wrap({ some: 'command' });
     });
@@ -7,17 +7,19 @@ describe('shouldResetBetweenTests', () => {
         cy.wrap({ some: 'command' });
     });
 
-    it('should pass AssertionError on console.error', () => {
-        // reset config, reset requests
-        cy.setExcludeMessages([
-            'firstErrorExcluded',
-            'secondErrorNotExcluded',
-        ]).then(() => {
-            cy.visit('./cypress/fixtures/consoleError.html');
-        });
+    it('should pass on request match', () => {
+        cy.setConfigRequests(['/xhr']);
+        cy.visit(
+            'http://localhost:3000/test?method=get&status=200&requests=1&delay=1'
+        );
+        cy.wait(1000);
     });
 
-    it('should throw AssertionError on console.error', () => {
-        cy.visit('./cypress/fixtures/consoleError.html');
+    it('should fail on request mismatch', () => {
+        cy.setConfigRequests([]);
+        cy.visit(
+            'http://localhost:3000/test?method=get&status=200&requests=1&delay=0'
+        );
+        cy.wait(1000);
     });
 });

@@ -1,35 +1,25 @@
 describe('shouldFailOnNetworkRequest', () => {
-    it('when no request exluded then fail on network request 400', () => {
-        cy.setRequests([]);
+    it('should fail on request mismatch', () => {
+        cy.setConfigRequests([]);
         cy.visit(
-            'http://localhost:3000/test?method=get&status=200&requests=3&delay=2000',
-            {
-                failOnStatusCode: false,
-            }
+            'http://localhost:3000/test?method=get&status=200&requests=1&delay=0'
         );
+        cy.wait(1000);
     });
-    // it('when not matching request as string exluded then fail on network request 400', () => {
-    //     cy.setRequests(['notMatching']);
-    //     cy.visit('http://localhost:3000/testStatusCode/400', {
-    //         failOnStatusCode: false,
-    //     });
-    // });
-    // it('when not matching request as Request exluded then fail on network request 400', () => {
-    //     cy.setRequests([{ url: 'notMatching' }]);
-    //     cy.visit('http://localhost:3000/testStatusCode/400', {
-    //         failOnStatusCode: false,
-    //     });
-    // });
-    // it('when not matching request as Request exluded then fail on network request 400', () => {
-    //     cy.setRequests([{ url: 'notMatching', status: 400 }]);
-    //     cy.visit('http://localhost:3000/testStatusCode/400', {
-    //         failOnStatusCode: false,
-    //     });
-    // });
-    // it('when not matching request as Request exluded then fail on network request 400', () => {
-    //     cy.setRequests([{ url: 'notMatching', method: 'GET', status: 400 }]);
-    //     cy.visit('http://localhost:3000/testStatusCode/400', {
-    //         failOnStatusCode: false,
-    //     });
-    // });
+
+    it('should pass on request match', () => {
+        cy.setConfigRequests(['/xhr']);
+        cy.visit(
+            'http://localhost:3000/test?method=get&status=200&requests=1&delay=1'
+        );
+        cy.wait(1000);
+    });
+
+    it('should fail on request mismatch', () => {
+        cy.setConfigRequests([]);
+        cy.visit(
+            'http://localhost:3000/test?method=get&status=200&requests=1&delay=2'
+        );
+        cy.wait(1000);
+    });
 });

@@ -1,31 +1,33 @@
-import { Request } from 'dist/types/Request';
-import failOnConsoleError, { Config } from '../../dist/index';
+import failOnNetworkRequest, { Config, Request } from '../../dist/index';
 import './commands';
 
 const config: Config = {
-    requests: [
+    // mode: 'error',
+    excludeRequests: [
         'excludedUrl',
-        { url: 'excludedUrl2', method: 'POST', status: 400 } as Request,
+        { url: 'xhr', method: 'GET', status: 428 },
+        { status: 200 },
     ],
-    timeout: 15000,
+    // waitRequests: 'none',
+    // waitRequestsTimeout: 30000,
 };
 
-const { getConfig, setConfig } = failOnConsoleError(config);
+const { getConfig, setConfig } = failOnNetworkRequest(config);
 
 Cypress.Commands.addAll({
-    getRequests: () => {
-        return cy.wrap(getConfig().requests);
+    getConfigRequests: () => {
+        return cy.wrap(getConfig().excludeRequests);
     },
-    setRequests: (requests: (string | Request)[]) => {
-        setConfig({ ...getConfig(), requests });
+    setConfigRequests: (requests: (string | Request)[]) => {
+        setConfig({ ...getConfig(), excludeRequests: requests });
     },
 });
 
 declare global {
     namespace Cypress {
         interface Chainable {
-            getRequests(): Chainable<any>;
-            setRequests(requests: (string | Request)[]): Chainable<void>;
+            getConfigRequests(): Chainable<any>;
+            setConfigRequests(requests: (string | Request)[]): Chainable<void>;
         }
     }
 }

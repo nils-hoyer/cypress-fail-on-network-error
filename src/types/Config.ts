@@ -1,6 +1,9 @@
 import { Request } from "./Request";
 
 export interface Config {
-    requests?: (string | Request)[];
-    timeout?: number;
+    // mode?: 'error' | 'log'
+    excludeRequests?: (string | Request)[];
+    // waitRequests?: 'afterEach' | 'after' | 'none';
+    // waitRequestsTimeout?: number;
+
 }

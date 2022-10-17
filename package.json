@@ -19,7 +19,7 @@
     "test": "npm run test:ut && npm run test:it",
     "test:ut": "ts-mocha test/unitTest.ts",
     "test:it": "ts-mocha test/integrationTest.ts --timeout 60000",
-    "verify": "npm run build:fe && npm run build:be && npm run lint && npm run prettier:check && npm run test"
+    "verify": "npm run build:be & npm run build:fe && npm run lint && npm run prettier:check && npm run test"
 
   },
   "repository": {

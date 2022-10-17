@@ -24,13 +24,16 @@ app.get('/test', (request, response) => {
 });
 
 app.get('/xhr', (request, response) => {
-    const { status } = request.query;
-    if (!status) return response.status(400).send('validation failed!');
+    const { status, delay } = request.query;
+    if (!status || !delay)
+        return response.status(400).send('validation failed!');
 
-    response
-        .set('Content-Type', 'application/json')
-        .status(parseInt(status))
-        .send();
+    setTimeout(() => {
+        response
+            .set('Content-Type', 'application/json')
+            .status(parseInt(status))
+            .send();
+    }, delay);
 });
 
 const generateHtml = ({ method, status, requests, delay }) => {

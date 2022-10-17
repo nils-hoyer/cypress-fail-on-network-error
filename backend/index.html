@@ -2,14 +2,12 @@
     <head>
         <script>
             for (let i = 0; i < parseInt('_requests_'); i++) {
-                setTimeout(() => {
-                    const request = new XMLHttpRequest();
-                    request.open(
-                        '_method_',
-                        'http://127.0.0.1:3000/xhr/?status=_status_'
-                    );
-                    request.send();
-                }, parseInt('_delay_') * i);
+                const request = new XMLHttpRequest();
+                request.open(
+                    '_method_',
+                    'http://127.0.0.1:3000/xhr/?status=_status_&delay=_delay_'
+                );
+                request.send();
             }
         </script>
     </head>

@@ -1,4 +1,6 @@
 import * as chai from 'chai';
+import { AssertionError } from 'chai';
+import { EOL } from 'os';
 import sinonChai from 'sinon-chai';
 import typeDetect from 'type-detect';
 import { Config } from './types/Config';
@@ -8,10 +10,10 @@ import { RequestSession } from './types/RequestSession';
 chai.should();
 chai.use(sinonChai);
 
-export default function failOnConsoleError(_config: Config = {}) {
+export default function failOnNetworkRequest(_config: Config = {}) {
     let config: Required<Config>;
     let originConfig: Required<Config>;
-    let requests: Map<string, RequestSession> = new Map();
+    let requests: RequestSession[] = [];
 
     const getConfig = () => config;
     const setConfig = (_config: Config): void => {
@@ -19,113 +21,64 @@ export default function failOnConsoleError(_config: Config = {}) {
         config = createConfig(_config);
         originConfig = originConfig ?? { ...config };
     };
+    // const getRequests = () => requests;
 
     setConfig(_config);
 
-    Cypress.on('uncaught:exception', (err, runnable) => {
-        // returning false here prevents Cypress from
-        // failing the test
-        // throw new AssertionError(
-        //     `test'
-        //     )}`
-        // );
-        return true;
-    });
-
-    Cypress.on('request:event', async (eventName, event) => {
-        const __subscribedEvents = [
+    Cypress.on('request:event', (eventName, event) => {
+        const subscribedEvents = [
             'incoming:request',
-            'response:received',
             'request:error',
+            'response:received',
         ];
-        const __unknownResponse =
+        const unknownResponse =
             eventName === 'response:received' &&
-            requests.get(event.requestId) === undefined;
+            findRequest(requests, event.requestId) === undefined;
 
-        if (!__subscribedEvents || __unknownResponse) return;
+        if (!subscribedEvents || unknownResponse) return;
 
         if (eventName === 'incoming:request') {
-            requests.set(event.requestId, {
+            requests.push({
                 requestId: event.requestId,
                 method: event.method,
                 url: event.url,
+                status: undefined,
+                // currentTest: { ...Cypress.currentTest },
             });
             return;
         }
 
-        requests.set(event.requestId, {
-            ...requests.get(event.requestId),
+        const requestDone: RequestSession = {
+            ...(findRequest(requests, event.requestId) as RequestSession),
             status: event.status,
-        } as RequestSession);
+        };
 
-        const requestsDone = Array.from(requests.values()).filter(
-            (request: RequestSession) => request.status !== undefined
-        );
-
-        const requestIncluded: RequestSession | undefined = requestsDone.find(
-            (request: RequestSession) => {
-                //TODO: replace any with Request
-                const isExcludedRequest = config.requests?.some(
-                    (configRequest: any) => {
-                        const urlMatch = configRequest.url
-                            ? new RegExp(configRequest.url).test(request.url)
-                            : true;
-                        const statusMatch = configRequest.status
-                            ? configRequest?.status === request.status
-                            : true;
-                        const methodMatch = configRequest?.method
-                            ? configRequest?.method === request.method
-                            : true;
-                        return urlMatch && statusMatch && methodMatch;
-                    }
-                );
-                return !isExcludedRequest;
-            }
-        );
-
-        if (requestIncluded) {
-            // throw new AssertionError(
-            //     `cypress-fail-on-network-request: ${EOL} ${JSON.stringify(
-            //         requestIncluded
-            //     )}`
-            // );
+        if (!isRequestExcluded(requestDone, getConfig())) {
+            throw new AssertionError(
+                `cypress-fail-on-network-request: ${EOL} ${JSON.stringify(
+                    requests
+                )}`
+            );
         }
     });
 
-    // use afterEach to bypass cy.wrap(promise) to wait tests until requests are done
-    // afterEach(() => {
-    //     if (requestIncluded) return;
-
-    //     const requestsDone = () =>
-    //         Array.from(requests.values()).every(
-    //             (request: RequestSession) => request.status !== undefined
-    //         );
-    //     cy.wrap(waitUntil(requestsDone), { timeout: config.timeout });
-    // });
-
-    // hier sollte die matching logik noch mal ausgeführt werden
-    // alternatic mit after(() => {}) umstellen
-    Cypress.on('command:end', () => {
-        // wird gegebenenfalls niemand true wenn requests empty ist
-        // const requestsDone = () =>
-        //     Array.from(requests.values()).every(
-        //         (request: RequestSession) => request.status !== undefined
-        //     );
-        // cy.wrap(waitUntil(requestsDone), { timeout: config.timeout });
-
+    Cypress.on('test:after:run', async () => {
         setConfig(originConfig as Config);
-        requests = new Map();
+        requests = [];
     });
 
     return {
         getConfig,
         setConfig,
+        // getRequestsResult: getRequests,
+        // waitForRequests,
+        // assertRequests,
     };
 }
 
 export const validateConfig = (config: Config): void => {
     // TODO replace any with Request
-    config.requests?.forEach((request: string | Request) => {
+    config.excludeRequests?.forEach((request: string | Request) => {
         if (typeof request === 'string') return;
         chai.expect(typeDetect(request.method)).to.be.oneOf([
             'string',
@@ -140,44 +93,194 @@ export const validateConfig = (config: Config): void => {
             'undefined',
         ]);
     });
-    chai.expect(typeDetect(config.timeout)).to.be.oneOf([
-        'number',
-        'undefined',
-    ]);
+    // chai.expect(typeDetect(config.waitRequestsTimeout)).to.be.oneOf([
+    //     'number',
+    //     'undefined',
+    // ]);
 };
 
 //TODO: use Request[] instead of any
 export const createConfig = (config: Config): Required<Config> => {
-    const mappedRequests: any = config.requests?.map(
-        (request: string | Request) => mapToRequest(request)
-    );
+    const excludeRequests =
+        config.excludeRequests !== undefined
+            ? mapToRequests(config.excludeRequests)
+            : [];
     return {
-        requests: mappedRequests ?? [],
-        timeout: config?.timeout ?? 30000,
+        excludeRequests,
+        // waitRequestsTimeout: config?.waitRequestsTimeout ?? 30000,
+        // waitRequests: config?.waitRequests ?? 'none',
+        // mode: config?.mode ?? 'error',
     };
 };
 
-export const mapToRequest = (_unknown: string | Request): Request => {
-    if (typeof _unknown !== 'string') {
-        return _unknown as Request;
-    }
-
-    return {
-        url: _unknown,
-        method: undefined,
-        status: undefined,
-    };
-};
-
-const waitUntil = (predicate: () => boolean) => {
-    const poll = (resolve: any) => {
-        if (predicate()) {
-            resolve();
-        } else {
-            setTimeout(() => poll(resolve), 500);
+export const mapToRequests = (_unknowns: (string | Request)[]): Request[] =>
+    _unknowns.map((unknown: string | Request) => {
+        if (typeof unknown !== 'string') {
+            return unknown as Request;
         }
-    };
-    return new Cypress.Promise(poll);
+
+        return {
+            url: unknown,
+            method: undefined,
+            status: undefined,
+        };
+    });
+
+export const findRequest = (
+    requests: RequestSession[],
+    eventRequestId: string
+) =>
+    requests.find(
+        (request: RequestSession) => request.requestId === eventRequestId
+    );
+
+export const isRequestExcluded = (
+    request: RequestSession,
+    config: Required<Config>
+): boolean => {
+    //TODO: replace any with Request
+    return config.excludeRequests?.some((configRequest: any) => {
+        debugger;
+        const urlMatch = configRequest.url
+            ? new RegExp(configRequest.url).test(request.url)
+            : true;
+        const statusMatch = configRequest.status
+            ? configRequest?.status === request.status
+            : true;
+        const methodMatch = configRequest?.method
+            ? configRequest?.method === request.method
+            : true;
+        return urlMatch && statusMatch && methodMatch;
+    });
 };
 
 export { Config } from './types/Config';
+export { Request } from './types/Request';
+
+// next steps:
+// filter request without status code
+// validate result
+// offer api for testing outside
+// disable waitRequest logic since its not waiting for request:incoming xhr. one option is to set a small wait to visit to ensure xhr is executed.
+
+// https://docs.cypress.io/api/events/catalog-of-events#Uncaught-Exceptions
+//check uncaught:exception from test:after:run wrap or Error exception
+//ideas mocha runnable
+// find mocha currentTest.state
+//check cypress events with localStorage.debug = 'cypress:*'
+
+// Cypress.on('test:after:run', (test) => {
+//     if (test.state === 'pending') {
+//       return pendingTests.push(test)
+//     }
+
+//     if (test.state === 'passed') {
+//       return passedTests.push(test)
+//     }
+//   })
+
+// Cypress.on('fail', (error) => {
+//     failedEventFired = true;
+//     throw new Error(error);
+// });
+
+//deactivated
+// Cypress.on('window:before:load', () => {
+//     //TODO delete canceled otherwise next test will wait infinity
+//     // requests = getRequests().filter(
+//     //     (request: RequestSession) => request.status !== undefined
+//     // );
+// });
+
+// deactivated
+// afterEach(() => {
+//     if (false && getConfig().waitRequests === 'afterEach') {
+//         waitForRequests(getRequests, getConfig());
+//     }
+// });
+
+// after(() => {
+//     // deactivated
+//     // if (false && getConfig().waitRequests === 'after') {
+//     //     waitForRequests(getRequests, getConfig());
+//     // }
+
+//     if (getConfig().mode === 'error') {
+//         const includedRequests = getRequestsIncluded(
+//             getRequests(),
+//             getConfig()
+//         );
+//         assertRequests(includedRequests);
+//     } else {
+//         cypressLogger('cypress-fail-on-network-request', getRequests());
+//     }
+// });
+
+// export const waitForRequests = (
+//     getRequests: () => RequestSession[],
+//     config: Required<Config>
+// ): Cypress.Chainable<any> => {
+//     const requestsDone = () => {
+//         console.log('waitForRequests', getRequests());
+//         return getRequests().every(
+//             (request: RequestSession) => request.status !== undefined
+//         );
+//     };
+
+//     let result = false;
+
+//     setTimeout(() => {
+//         setResult(true);
+//     }, 5000);
+
+//     const setResult = (r: boolean) => (result = r);
+//     const getResult = () => result;
+//     // return cy.wrap(waitUntil(getResult, 10000), { timeout: 20000 });
+
+//     return cy.wrap(waitUntil(requestsDone, config.waitRequestsTimeout), {
+//         timeout: config.waitRequestsTimeout,
+//     });
+// };
+
+// const waitUntil = (predicate: () => boolean, timeout: number) => {
+//     const startTime = new Date().getTime();
+//     const timeIsUp = (startTime: number, timeout: number) =>
+//         new Date().getTime() > startTime + timeout;
+
+//     const poll = (resolve: any) => {
+//         console.log(
+//             'predicate',
+//             predicate(),
+//             'timeIsUp',
+//             timeIsUp(startTime, timeout)
+//         );
+//         if (predicate() || timeIsUp(startTime, timeout)) {
+//             resolve();
+//         } else {
+//             setTimeout(() => poll(resolve), 500);
+//         }
+//     };
+//     return new Cypress.Promise(poll);
+// };
+
+// export const assertRequests = (requests: RequestSession[]) => {
+//     if (requests.length > 0) {
+//         throw new AssertionError(
+//             `cypress-fail-on-network-request: ${EOL} ${JSON.stringify(
+//                 requests
+//             )}`
+//         );
+//     }
+// };
+
+// export const cypressLogger = (name: string, message: any) => {
+//     Cypress.log({
+//         name: name,
+//         displayName: name,
+//         message: JSON.stringify(message),
+//         consoleProps: () => message,
+//     });
+// };
+
+// export const mapToArray = (map: Map<string, RequestSession>) =>
+//     Array.from(map.values());
