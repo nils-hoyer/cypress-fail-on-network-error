@@ -78,25 +78,27 @@ export default function failOnNetworkRequest(_config: Config = {}) {
 
 export const validateConfig = (config: Config): void => {
     // TODO replace any with Request
-    config.excludeRequests?.forEach((request: string | Request) => {
-        if (typeof request === 'string') return;
+    config.excludeRequests?.forEach((request: any) => {
+        if (typeDetect(request) === 'string') return;
+        chai.expect(typeDetect(request.url)).to.be.oneOf([
+            'string',
+            'RegExp',
+            'undefined',
+        ]);
         chai.expect(typeDetect(request.method)).to.be.oneOf([
             'string',
             'undefined',
         ]);
-        chai.expect(typeDetect(request.url)).to.be.oneOf([
-            'string',
-            'undefined',
-        ]);
         chai.expect(typeDetect(request.status)).to.be.oneOf([
+            'Object',
             'number',
             'undefined',
         ]);
+        if (typeDetect(request.status) === 'Object') {
+            chai.expect(typeDetect(request.status.from)).to.equal('number');
+            chai.expect(typeDetect(request.status.to)).to.equal('number');
+        }
     });
-    // chai.expect(typeDetect(config.waitRequestsTimeout)).to.be.oneOf([
-    //     'number',
-    //     'undefined',
-    // ]);
 };
 
 //TODO: use Request[] instead of any
@@ -116,7 +118,24 @@ export const createConfig = (config: Config): Required<Config> => {
 export const mapToRequests = (_unknowns: (string | Request)[]): Request[] =>
     _unknowns.map((unknown: string | Request) => {
         if (typeof unknown !== 'string') {
-            return unknown as Request;
+            // unknown as Request;
+            let status = undefined;
+
+            if (unknown.status !== undefined) {
+                status =
+                    typeDetect(unknown.status) === 'number'
+                        ? { from: unknown.status, to: unknown.status }
+                        : {
+                              from: (unknown.status as any).from,
+                              to: (unknown.status as any).to,
+                          };
+            }
+
+            return {
+                url: unknown.url,
+                method: unknown.method,
+                status,
+            };
         }
 
         return {

@@ -1,5 +1,12 @@
 export interface Request {
-    url?: string | RegExp;
-    method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
-    status?: number;
+    url?: Url;
+    method?: Method
+    status?: number | Range;
+}
+
+export type Url = string | RegExp;
+export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+export type Range = {
+    from: number;
+    to: number;
 }
