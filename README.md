@@ -15,13 +15,14 @@ npm install cypress-fail-on-network-request --save-dev
 `cypress/support/e2e.js`
 
 ```js
-import failOnNetworkRequest, { Config } from 'cypress-fail-on-network-request';
+import failOnNetworkRequest, { Config, Request } from 'cypress-fail-on-network-request';
 
 const config: Config = {
     excludeRequests: [
         'simpleUrlToExclude',
-        { url: '/urlToExclude', method: 'GET', status: 400 },
-        { status: 200 },
+        { url: /urlToExclude/, method: 'GET', status: 400 },
+        { status: 430 },
+        { status: { from: 200, to: 399 } },
     ],
 };
 
@@ -32,7 +33,7 @@ failOnNetworkRequest(config)
 
 | Parameter             | Default               | <div style="width:300px">Description</div>    |
 |---                    |---                    |---                                            |
-| `excludeRequests`     | `[]` | Exclude requests from throwing `AssertionError`. Types `RegExp`, `string` and `Request` are accepted. Url as `string` will be converted to type ``RegExp`. [String.match()](https://developer.mozilla.org/de/docs/Web/JavaScript/Reference/Global_Objects/String/match) will be used for matching. |                                   
+| `excludeRequests`     | `[]` | Exclude requests from throwing `AssertionError`. Types `string`, `RegExp`, `Request` are accepted. `string` and request.url will be converted to type `RegExp`. [String.match()](https://developer.mozilla.org/de/docs/Web/JavaScript/Reference/Global_Objects/String/match) will be used for matching. |                                   
 
 <br/>
 

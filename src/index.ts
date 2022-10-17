@@ -164,7 +164,8 @@ export const isRequestExcluded = (
             ? new RegExp(configRequest.url).test(request.url)
             : true;
         const statusMatch = configRequest.status
-            ? configRequest?.status === request.status
+            ? configRequest.status.from >= (request.status as number) &&
+              configRequest.status.to <= (request.status as number)
             : true;
         const methodMatch = configRequest?.method
             ? configRequest?.method === request.method

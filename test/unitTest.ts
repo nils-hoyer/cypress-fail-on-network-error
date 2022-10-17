@@ -57,7 +57,7 @@ describe('validateConfig()', () => {
 });
 
 describe('mapToRequests()', () => {
-    it.only('WHEN mapToRequests is called THEN expect Request object array', () => {
+    it('WHEN mapToRequests is called THEN expect Request object array', () => {
         const excludeRequests = [
             'url1',
             { url: 'url2', status: 400, method: 'GET' },

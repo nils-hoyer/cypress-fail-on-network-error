@@ -217,7 +217,8 @@ var isRequestExcluded = function (request, config) {
             ? new RegExp(configRequest.url).test(request.url)
             : true;
         var statusMatch = configRequest.status
-            ? (configRequest === null || configRequest === void 0 ? void 0 : configRequest.status) === request.status
+            ? configRequest.status.from >= request.status &&
+                configRequest.status.to <= request.status
             : true;
         var methodMatch = (configRequest === null || configRequest === void 0 ? void 0 : configRequest.method)
             ? (configRequest === null || configRequest === void 0 ? void 0 : configRequest.method) === request.method

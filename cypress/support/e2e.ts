@@ -5,8 +5,9 @@ const config: Config = {
     // mode: 'error',
     excludeRequests: [
         'excludedUrl',
-        { url: 'xhr', method: 'GET', status: 428 },
-        { status: 200 },
+        { url: /xhr/, method: 'GET', status: 428 },
+        { status: 430 },
+        { status: { from: 200, to: 399 } },
     ],
     // waitRequests: 'none',
     // waitRequestsTimeout: 30000,
