@@ -1,14 +1,10 @@
 # cypress-fail-on-network-request
 
-This Plugin observes network requests through cypress network events. Cypress test fails when `response:received` or `request:error` event is received. 
+This Plugin observes network requests through cypress network events. Cypress test fails when `response:received` or `request:error` event is received. For observing `console.error()` please check out [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
 
 <p>
 
-For observing `console.error()` please check out [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
-
-<p>
-
-By default cypress will not wait for xhr requests to be solved after cypress commands (after e.g. `cy.visit` or `cy.click`). Also the browser cancel unsolved requests when `window.location` changes (cypress commands or website). As a result of that `cypress-fail-on-network-request` can only evaluate network request events within the cypress test execution. The plugin also provide an experimental function to manually wait for all requests to be solved within the test. See section `Wait for requests to be solved`
+By default cypress will not wait for xhr requests to be solved after cypress commands (after e.g. `cy.visit` or `cy.click`). Also the browser cancel unsolved requests when `window.location` changes. As a result of that `cypress-fail-on-network-request` can only evaluate network request events within the cypress test execution. The plugin also provide an experimental function to manually wait for all requests to be solved within the test. See section `Wait for requests to be solved`
 
 
 ### Installation
@@ -25,7 +21,7 @@ npm install cypress-fail-on-network-request --save-dev
 import failOnNetworkRequest, { Config, Request } from 'cypress-fail-on-network-request';
 
 const config: Config = {
-    excludeRequests: [
+    requests: [
         'simpleUrlToExclude',
         { url: /urlToExclude/, method: 'GET', status: 400 },
         { status: 430 },

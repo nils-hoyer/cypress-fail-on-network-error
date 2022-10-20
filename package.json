@@ -1,6 +1,6 @@
 {
   "name": "cypress-fail-on-network-request",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "fail cypress test on network request",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
