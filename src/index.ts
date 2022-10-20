@@ -188,65 +188,6 @@ export const isRequestExcluded = (
 export { Config } from './types/Config';
 export { Request } from './types/Request';
 
-// next steps:
-// filter request without status code
-// validate result
-// offer api for testing outside
-// disable waitRequest logic since its not waiting for request:incoming xhr. one option is to set a small wait to visit to ensure xhr is executed.
-
-// https://docs.cypress.io/api/events/catalog-of-events#Uncaught-Exceptions
-//check uncaught:exception from test:after:run wrap or Error exception
-//ideas mocha runnable
-// find mocha currentTest.state
-//check cypress events with localStorage.debug = 'cypress:*'
-
-// Cypress.on('test:after:run', (test) => {
-//     if (test.state === 'pending') {
-//       return pendingTests.push(test)
-//     }
-
-//     if (test.state === 'passed') {
-//       return passedTests.push(test)
-//     }
-//   })
-
-// Cypress.on('fail', (error) => {
-//     failedEventFired = true;
-//     throw new Error(error);
-// });
-
-//deactivated
-// Cypress.on('window:before:load', () => {
-//     //TODO delete canceled otherwise next test will wait infinity
-//     // requests = getRequests().filter(
-//     //     (request: RequestSession) => request.status !== undefined
-//     // );
-// });
-
-// deactivated
-// afterEach(() => {
-//     if (false && getConfig().waitRequests === 'afterEach') {
-//         waitForRequests(getRequests, getConfig());
-//     }
-// });
-
-// after(() => {
-//     // deactivated
-//     // if (false && getConfig().waitRequests === 'after') {
-//     //     waitForRequests(getRequests, getConfig());
-//     // }
-
-//     if (getConfig().mode === 'error') {
-//         const includedRequests = getRequestsIncluded(
-//             getRequests(),
-//             getConfig()
-//         );
-//         assertRequests(includedRequests);
-//     } else {
-//         cypressLogger('cypress-fail-on-network-request', getRequests());
-//     }
-// });
-
 const waitUntil = (predicate: () => boolean, timeout: number) => {
     const startTime = new Date().getTime();
     const isTimeUp = (startTime: number, timeout: number) =>
@@ -261,25 +202,3 @@ const waitUntil = (predicate: () => boolean, timeout: number) => {
     };
     return new Cypress.Promise(poll);
 };
-
-// export const assertRequests = (requests: RequestSession[]) => {
-//     if (requests.length > 0) {
-//         throw new AssertionError(
-//             `cypress-fail-on-network-request: ${EOL} ${JSON.stringify(
-//                 requests
-//             )}`
-//         );
-//     }
-// };
-
-// export const cypressLogger = (name: string, message: any) => {
-//     Cypress.log({
-//         name: name,
-//         displayName: name,
-//         message: JSON.stringify(message),
-//         consoleProps: () => message,
-//     });
-// };
-
-// export const mapToArray = (map: Map<string, RequestSession>) =>
-//     Array.from(map.values());

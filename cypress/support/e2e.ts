@@ -2,7 +2,6 @@ import failOnNetworkRequest, { Config, Request } from '../../dist/index';
 import './commands';
 
 const config: Config = {
-    // mode: 'error',
     excludeRequests: [
         'excludedUrl',
         { url: /xhr/, method: 'GET', status: 428 },
