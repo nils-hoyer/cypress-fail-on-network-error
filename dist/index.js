@@ -77,10 +77,7 @@ exports.isRequestExcluded = exports.findRequest = exports.mapToRequests = export
 var chai = __importStar(require("chai"));
 var chai_1 = require("chai");
 var os_1 = require("os");
-var sinon_chai_1 = __importDefault(require("sinon-chai"));
 var type_detect_1 = __importDefault(require("type-detect"));
-chai.should();
-chai.use(sinon_chai_1.default);
 function failOnNetworkRequest(_config) {
     var _this = this;
     if (_config === void 0) { _config = {}; }

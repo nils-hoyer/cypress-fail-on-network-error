@@ -8,6 +8,7 @@
     "dist/**/*"
   ],
   "scripts": {
+    "build": "npm run build:be & npm run build:fe",
     "build:fe": "npx rimraf dist/ && tsc",
     "build:be": "node ./backend/app.js",
     "dev": "npm run dev:fe & npm run dev:be",
@@ -19,7 +20,7 @@
     "test": "npm run test:ut && npm run test:it",
     "test:ut": "ts-mocha test/unitTest.ts",
     "test:it": "ts-mocha test/integrationTest.ts --timeout 60000",
-    "verify": "npm run build:be & npm run build:fe && npm run lint && npm run prettier:check && npm run test"
+    "verify": "npm run build && npm run lint && npm run prettier:check && npm run test"
 
   },
   "repository": {
@@ -29,7 +30,7 @@
   "keywords": [
     "cypress",
     "testing",
-    "console"
+    "network-request"
   ],
   "author": "nils-hoyer",
   "license": "MIT",
@@ -38,16 +39,12 @@
   },
   "homepage": "https://github.com/nils-hoyer/cypress-fail-on-network-request#readme",
   "dependencies": {
-    "chai": "^4.3.4",
-    "sinon": "^14.0.0",
-    "sinon-chai": "^3.7.0"
+    "chai": "^4.3.4"
   },
   "devDependencies": {
     "@types/chai": "4.3.3",
     "@types/expect": "24.3.0",
     "@types/mocha": "9.1.1",
-    "@types/sinon": "10.0.13",
-    "@types/sinon-chai": "3.2.8",
     "@types/type-detect": "4.0.1",
     "cors": "^2.8.5",
     "cypress": "10.8.0",

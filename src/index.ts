@@ -1,14 +1,10 @@
 import * as chai from 'chai';
 import { AssertionError } from 'chai';
 import { EOL } from 'os';
-import sinonChai from 'sinon-chai';
 import typeDetect from 'type-detect';
 import { Config } from './types/Config';
 import { Request } from './types/Request';
 import { RequestSession } from './types/RequestSession';
-
-chai.should();
-chai.use(sinonChai);
 
 export default function failOnNetworkRequest(_config: Config = {}) {
     let config: Required<Config>;
