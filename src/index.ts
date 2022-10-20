@@ -15,13 +15,24 @@ export default function failOnNetworkRequest(_config: Config = {}) {
     let originConfig: Required<Config>;
     let requests: RequestSession[] = [];
 
+    const getRequests = () => requests;
+
     const getConfig = () => config;
     const setConfig = (_config: Config): void => {
         validateConfig(_config);
         config = createConfig(_config);
         originConfig = originConfig ?? { ...config };
     };
-    // const getRequests = () => requests;
+    const waitForRequests = (timeout = 10000): Cypress.Chainable<any> => {
+        const requestsDone = () =>
+            getRequests().every(
+                (request: RequestSession) => request.status !== undefined
+            );
+
+        return cy.wrap(waitUntil(requestsDone, timeout), {
+            timeout,
+        });
+    };
 
     setConfig(_config);
 
@@ -43,17 +54,24 @@ export default function failOnNetworkRequest(_config: Config = {}) {
                 method: event.method,
                 url: event.url,
                 status: undefined,
-                // currentTest: { ...Cypress.currentTest },
             });
             return;
         }
 
-        const requestDone: RequestSession = {
-            ...(findRequest(requests, event.requestId) as RequestSession),
-            status: event.status,
-        };
+        requests = requests.map((request: RequestSession) => {
+            if (request.requestId !== event.requestId) return request;
+            return {
+                ...request,
+                status: event.status,
+            };
+        });
 
-        if (!isRequestExcluded(requestDone, getConfig())) {
+        if (
+            !isRequestExcluded(
+                findRequest(requests, event.requestId) as RequestSession,
+                getConfig()
+            )
+        ) {
             throw new AssertionError(
                 `cypress-fail-on-network-request: ${EOL} ${JSON.stringify(
                     requests
@@ -70,9 +88,7 @@ export default function failOnNetworkRequest(_config: Config = {}) {
     return {
         getConfig,
         setConfig,
-        // getRequestsResult: getRequests,
-        // waitForRequests,
-        // assertRequests,
+        waitForRequests,
     };
 }
 
@@ -109,16 +125,12 @@ export const createConfig = (config: Config): Required<Config> => {
             : [];
     return {
         excludeRequests,
-        // waitRequestsTimeout: config?.waitRequestsTimeout ?? 30000,
-        // waitRequests: config?.waitRequests ?? 'none',
-        // mode: config?.mode ?? 'error',
     };
 };
 
 export const mapToRequests = (_unknowns: (string | Request)[]): Request[] =>
     _unknowns.map((unknown: string | Request) => {
         if (typeof unknown !== 'string') {
-            // unknown as Request;
             let status = undefined;
 
             if (unknown.status !== undefined) {
@@ -159,7 +171,6 @@ export const isRequestExcluded = (
 ): boolean => {
     //TODO: replace any with Request
     return config.excludeRequests?.some((configRequest: any) => {
-        debugger;
         const urlMatch = configRequest.url
             ? new RegExp(configRequest.url).test(request.url)
             : true;
@@ -236,52 +247,20 @@ export { Request } from './types/Request';
 //     }
 // });
 
-// export const waitForRequests = (
-//     getRequests: () => RequestSession[],
-//     config: Required<Config>
-// ): Cypress.Chainable<any> => {
-//     const requestsDone = () => {
-//         console.log('waitForRequests', getRequests());
-//         return getRequests().every(
-//             (request: RequestSession) => request.status !== undefined
-//         );
-//     };
+const waitUntil = (predicate: () => boolean, timeout: number) => {
+    const startTime = new Date().getTime();
+    const isTimeUp = (startTime: number, timeout: number) =>
+        new Date().getTime() > startTime + timeout;
 
-//     let result = false;
-
-//     setTimeout(() => {
-//         setResult(true);
-//     }, 5000);
-
-//     const setResult = (r: boolean) => (result = r);
-//     const getResult = () => result;
-//     // return cy.wrap(waitUntil(getResult, 10000), { timeout: 20000 });
-
-//     return cy.wrap(waitUntil(requestsDone, config.waitRequestsTimeout), {
-//         timeout: config.waitRequestsTimeout,
-//     });
-// };
-
-// const waitUntil = (predicate: () => boolean, timeout: number) => {
-//     const startTime = new Date().getTime();
-//     const timeIsUp = (startTime: number, timeout: number) =>
-//         new Date().getTime() > startTime + timeout;
-
-//     const poll = (resolve: any) => {
-//         console.log(
-//             'predicate',
-//             predicate(),
-//             'timeIsUp',
-//             timeIsUp(startTime, timeout)
-//         );
-//         if (predicate() || timeIsUp(startTime, timeout)) {
-//             resolve();
-//         } else {
-//             setTimeout(() => poll(resolve), 500);
-//         }
-//     };
-//     return new Cypress.Promise(poll);
-// };
+    const poll = (resolve: any) => {
+        if (predicate() || isTimeUp(startTime, timeout)) {
+            resolve();
+        } else {
+            setTimeout(() => poll(resolve), 500);
+        }
+    };
+    return new Cypress.Promise(poll);
+};
 
 // export const assertRequests = (requests: RequestSession[]) => {
 //     if (requests.length > 0) {

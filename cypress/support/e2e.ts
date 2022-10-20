@@ -9,11 +9,9 @@ const config: Config = {
         { status: 430 },
         { status: { from: 200, to: 399 } },
     ],
-    // waitRequests: 'none',
-    // waitRequestsTimeout: 30000,
 };
 
-const { getConfig, setConfig } = failOnNetworkRequest(config);
+const { getConfig, setConfig, waitForRequests } = failOnNetworkRequest(config);
 
 Cypress.Commands.addAll({
     getConfigRequests: () => {
@@ -22,6 +20,9 @@ Cypress.Commands.addAll({
     setConfigRequests: (requests: (string | Request)[]) => {
         setConfig({ ...getConfig(), excludeRequests: requests });
     },
+    waitForRequests: () => {
+        return waitForRequests();
+    },
 });
 
 declare global {
@@ -29,6 +30,7 @@ declare global {
         interface Chainable {
             getConfigRequests(): Chainable<any>;
             setConfigRequests(requests: (string | Request)[]): Chainable<void>;
+            waitForRequests(): Chainable<void>;
         }
     }
 }

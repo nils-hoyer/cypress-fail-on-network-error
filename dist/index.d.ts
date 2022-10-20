@@ -4,6 +4,7 @@ import { RequestSession } from './types/RequestSession';
 export default function failOnNetworkRequest(_config?: Config): {
     getConfig: () => Required<Config>;
     setConfig: (_config: Config) => void;
+    waitForRequests: (timeout?: number) => Cypress.Chainable<any>;
 };
 export declare const validateConfig: (config: Config) => void;
 export declare const createConfig: (config: Config) => Required<Config>;
