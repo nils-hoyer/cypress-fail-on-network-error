@@ -1,11 +1,6 @@
 # cypress-fail-on-network-request
 
-This Plugin observes network requests through cypress network events. Cypress test fails when `response:received` or `request:error` event is received. For observing `console.error()` please check out [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
-
-<p>
-
-By default cypress will not wait for xhr requests to be solved after cypress commands (after e.g. `cy.visit` or `cy.click`). Also the browser cancel unsolved requests when `window.location` changes. As a result of that `cypress-fail-on-network-request` can only evaluate network request events within the cypress test execution. The plugin also provide an experimental function to manually wait for all requests to be solved within the test. See section `Wait for requests to be solved`
-
+This Plugin observes network requests through cypress network events. Cypress test fails when a response or request error is received. For observing `console.error()` please check out [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
 
 ### Installation
 
@@ -23,7 +18,8 @@ import failOnNetworkRequest, { Config, Request } from 'cypress-fail-on-network-r
 const config: Config = {
     requests: [
         'simpleUrlToExclude',
-        { url: /urlToExclude/, method: 'GET', status: 400 },
+        { url: 'simpleUrlToExclude', method: 'GET', status: 400 },
+        { url: /urlToExclude/, method: 'POST', status: 428 },
         { status: 430 },
         { status: { from: 200, to: 399 } },
     ],
@@ -47,10 +43,10 @@ const { getConfig, setConfig } = failOnNetworkRequest(config);
 
 Cypress.Commands.addAll({
     getConfigRequests: () => {
-        return cy.wrap(getConfig().excludeRequests);
+        return cy.wrap(getConfig().requests);
     },
     setConfigRequests: (requests: (string | Request)[]) => {
-        setConfig({ ...getConfig(), excludeRequests: requests });
+        setConfig({ ...getConfig(), requests });
     },
 });
 ```
@@ -64,14 +60,11 @@ describe('example test', () => {
 });
 ```
 
-### Wait for requests to be solved
-Use `failOnNetworkRequest` function `waitForRequests()` to wait until all requests are resolved. The default timeout is 10.000 ms which can be changed by overriding the default value `waitForRequests(5000)`. The functions is designed to continue after timeout, even if requests are not resolved. 
+### Wait for all pending requests to be resolved
+Use `failOnNetworkRequest` function `waitForRequests()` to wait until all pending requests are resolved. The default timeout is 10000 ms which can be changed by overriding the default value `waitForRequests(5000)`. When reaching the timeout, Cypress test execution will continue without throwing an timeout exception.
+Detailed documenation for [cypress comands](https://github.com/nils-hoyer/cypress-fail-on-network-request/blob/main/cypress/support/e2e.ts#L13-L35) & [cypress test](https://github.com/nils-hoyer/cypress-fail-on-network-request/blob/main/cypress/e2e/shouldWaitForRequests.cy.ts).
 
-<p>
-
-Keep in mind that the website or cypress can interrupt pending requests anytime by changing `window.location`, which results in those requests can never be resolved. Detailed example implementation [cypress comands](https://github.com/nils-hoyer/cypress-fail-on-network-request/blob/main/cypress/support/e2e.ts#L13-L35) & [cypress test](https://github.com/nils-hoyer/cypress-fail-on-network-request/blob/main/cypress/e2e/shouldWaitForRequests.cy.ts).
 ```js
-
 const { waitForRequests } = failOnNetworkRequest(config);
 
 Cypress.Commands.addAll({
@@ -84,7 +77,6 @@ describe('example test', () => {
     it('should wait for requests to be solved', () => {
         cy.visit('url');
         cy.wait(0).waitForRequests();
-        // seems to run only stable on next tick
     });
 });
 ```
