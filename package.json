@@ -1,6 +1,6 @@
 {
   "name": "cypress-fail-on-network-request",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "fail cypress test on network request",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,7 +21,6 @@
     "test:ut": "ts-mocha test/unitTest.ts",
     "test:it": "ts-mocha test/integrationTest.ts --timeout 60000",
     "verify": "npm run build && npm run lint && npm run prettier:check && npm run test"
-
   },
   "repository": {
     "type": "git",
