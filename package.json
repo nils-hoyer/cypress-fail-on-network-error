@@ -54,6 +54,6 @@
     "rimraf": "4.4.0",
     "ts-mocha": "10.0.0",
     "typescript": "5.0.2",
-    "nodemon": "2.0.21"
+    "nodemon": "2.0.22"
   }
 }
