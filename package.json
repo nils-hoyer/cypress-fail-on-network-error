@@ -41,7 +41,7 @@
     "chai": "^4.3.4"
   },
   "devDependencies": {
-    "@types/chai": "4.3.4",
+    "@types/chai": "4.3.5",
     "@types/expect": "24.3.0",
     "@types/mocha": "10.0.1",
     "@types/type-detect": "4.0.1",
