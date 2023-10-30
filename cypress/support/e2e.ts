@@ -1,4 +1,4 @@
-import failOnNetworkRequest, { Config, Request } from '../../dist/index';
+import failOnNetworkError, { Config, Request } from '../../dist/index';
 import './commands';
 
 const config: Config = {
@@ -10,7 +10,7 @@ const config: Config = {
     ],
 };
 
-const { getConfig, setConfig, waitForRequests } = failOnNetworkRequest(config);
+const { getConfig, setConfig, waitForRequests } = failOnNetworkError(config);
 
 Cypress.Commands.addAll({
     getConfigRequests: () => {

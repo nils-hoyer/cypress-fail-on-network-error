@@ -1,12 +1,23 @@
 import * as chai from 'chai';
 import { AssertionError } from 'chai';
-import { EOL } from 'os';
 import typeDetect from 'type-detect';
-import { Config } from './types/Config';
-import { Request } from './types/Request';
-import { RequestSession } from './types/RequestSession';
 
-export default function failOnNetworkRequest(_config: Config = {}) {
+export type Config = {
+    requests?: (string | Request)[];
+};
+
+export interface Request {
+    url?: string | RegExp;
+    method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+    status?: number | Range;
+}
+
+export type Range = {
+    from: number;
+    to: number;
+};
+
+export default function failOnNetworkError(_config: Config = {}) {
     let config: Required<Config>;
     let originConfig: Required<Config>;
     let requests: RequestSession[] = [];
@@ -19,6 +30,7 @@ export default function failOnNetworkRequest(_config: Config = {}) {
         config = createConfig(_config);
         originConfig = originConfig ?? { ...config };
     };
+
     const waitForRequests = (timeout = 10000): Cypress.Chainable<any> => {
         const requestsDone = () =>
             getRequests().every(
@@ -69,9 +81,7 @@ export default function failOnNetworkRequest(_config: Config = {}) {
             )
         ) {
             throw new AssertionError(
-                `cypress-fail-on-network-request: ${EOL} ${JSON.stringify(
-                    requests
-                )}`
+                `cypress-fail-on-network-request:\n${JSON.stringify(requests)}`
             );
         }
     });
@@ -178,9 +188,6 @@ export const isRequestExcluded = (
     });
 };
 
-export { Config } from './types/Config';
-export { Request } from './types/Request';
-
 const waitUntil = (predicate: () => boolean, timeout: number) => {
     const startTime = new Date().getTime();
     const isTimeUp = (startTime: number, timeout: number) =>
@@ -194,4 +201,11 @@ const waitUntil = (predicate: () => boolean, timeout: number) => {
         }
     };
     return new Cypress.Promise(poll);
+};
+
+export type RequestSession = {
+    requestId: string;
+    method: string;
+    url: string;
+    status?: number;
 };

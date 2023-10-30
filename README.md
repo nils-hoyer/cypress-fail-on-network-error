@@ -13,7 +13,7 @@ npm install cypress-fail-on-network-request --save-dev
 `cypress/support/e2e.js`
 
 ```js
-import failOnNetworkRequest, { Config, Request } from 'cypress-fail-on-network-request';
+import failOnNetworkError, { Config, Request } from 'cypress-fail-on-network-request';
 
 const config: Config = {
     requests: [
@@ -25,7 +25,7 @@ const config: Config = {
     ],
 };
 
-failOnNetworkRequest(config)
+failOnNetworkError(config)
 ```
 
 ### Config
@@ -37,9 +37,9 @@ failOnNetworkRequest(config)
 <br/>
 
 ### Set config from cypress test 
-Use `failOnNetworkRequest` functions `getConfig()` and `setConfig()` with your own requirements. Detailed example implementation [cypress comands](https://github.com/nils-hoyer/cypress-fail-on-network-request/blob/main/cypress/support/e2e.ts#L14-L64) & [cypress test](https://github.com/nils-hoyer/cypress-fail-on-network-request/blob/main/cypress/e2e/shouldFailOnNetworkRequest.cy.ts#L1-L25). Note that the config will be resetted to initial config between tests.
+Use `failOnNetworkError` functions `getConfig()` and `setConfig()` with your own requirements. Detailed example implementation [cypress comands](https://github.com/nils-hoyer/cypress-fail-on-network-request/blob/main/cypress/support/e2e.ts#L14-L64) & [cypress test](https://github.com/nils-hoyer/cypress-fail-on-network-request/blob/main/cypress/e2e/shouldfailOnNetworkError.cy.ts#L1-L25). Note that the config will be resetted to initial config between tests.
 ```js
-const { getConfig, setConfig } = failOnNetworkRequest(config);
+const { getConfig, setConfig } = failOnNetworkError(config);
 
 Cypress.Commands.addAll({
     getConfigRequests: () => {
@@ -61,11 +61,11 @@ describe('example test', () => {
 ```
 
 ### Wait for all pending requests to be resolved
-Use `failOnNetworkRequest` function `waitForRequests()` to wait until all pending requests are resolved. The default timeout is 10000 ms which can be changed by overriding the default value `waitForRequests(5000)`. When reaching the timeout, Cypress test execution will continue without throwing an timeout exception.
+Use `failOnNetworkError` function `waitForRequests()` to wait until all pending requests are resolved. The default timeout is 10000 ms which can be changed by overriding the default value `waitForRequests(5000)`. When reaching the timeout, Cypress test execution will continue without throwing an timeout exception.
 Detailed documenation for [cypress comands](https://github.com/nils-hoyer/cypress-fail-on-network-request/blob/main/cypress/support/e2e.ts#L13-L35) & [cypress test](https://github.com/nils-hoyer/cypress-fail-on-network-request/blob/main/cypress/e2e/shouldWaitForRequests.cy.ts).
 
 ```js
-const { waitForRequests } = failOnNetworkRequest(config);
+const { waitForRequests } = failOnNetworkError(config);
 
 Cypress.Commands.addAll({
     waitForRequests: () => waitForRequests(),

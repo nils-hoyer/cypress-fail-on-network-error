@@ -8,7 +8,7 @@ const cypressRun =
 
 describe('Cypress', () => {
     it('WHEN request error is called THEN cypress fails', async () => {
-        const spec = ' --spec ./cypress/e2e/shouldFailOnNetworkRequest.cy.ts';
+        const spec = ' --spec ./cypress/e2e/shouldfailOnNetworkError.cy.ts';
         let testResult = '';
 
         try {

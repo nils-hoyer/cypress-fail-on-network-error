@@ -1,8 +1,8 @@
 import * as chai from 'chai';
 import { AssertionError } from 'chai';
-import { RequestSession } from 'dist/types/RequestSession';
-import { Config } from '../dist/types/Config';
-import failOnNetworkRequest, {
+import failOnNetworkError, {
+    Config,
+    RequestSession,
     createConfig,
     isRequestExcluded,
     mapToRequests,
@@ -12,15 +12,15 @@ import failOnNetworkRequest, {
 //@ts-ignore
 global['Cypress'] = { on: (f, s) => true };
 
-describe('failOnNetworkRequest()', () => {
-    it('WHEN failOnNetworkRequest is created with Config THEN expect no error', () => {
+describe('failOnNetworkError()', () => {
+    it('WHEN failOnNetworkError is created with Config THEN expect no error', () => {
         const config: Config = {
             requests: ['foo'],
         };
-        failOnNetworkRequest(config);
+        failOnNetworkError(config);
     });
-    it('WHEN failOnNetworkRequest is created with no Config THEN expect no error', () => {
-        failOnNetworkRequest();
+    it('WHEN failOnNetworkError is created with no Config THEN expect no error', () => {
+        failOnNetworkError();
     });
 });
 
