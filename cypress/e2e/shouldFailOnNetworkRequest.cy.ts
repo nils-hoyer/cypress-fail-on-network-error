@@ -1,4 +1,4 @@
-describe('shouldfailOnNetworkError', () => {
+describe('shouldfailOnNetworkRequest', () => {
     it('should fail on request mismatch', () => {
         cy.setConfigRequests([]);
         cy.visit(

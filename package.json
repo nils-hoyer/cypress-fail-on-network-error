@@ -19,8 +19,8 @@
     "prettier:check": "prettier --check \"**/*\"",
     "lint": "tsc --noEmit && tsc -p ./test/tsconfig.json && tsc -p ./cypress/tsconfig.json",
     "test": "npm run test:ut && npm run test:it",
-    "test:ut": "ts-mocha test/unitTest.ts",
-    "test:it": "ts-mocha test/integrationTest.ts --timeout 60000",
+    "test:ut": "ts-mocha -n loader=ts-node/esm test/unitTest.ts",
+    "test:it": "ts-mocha -n loader=ts-node/esm test/integrationTest.ts --timeout 60000",
     "verify": "npm run build && npm run lint && npm run prettier:check && npm run test"
   },
   "repository": {
@@ -51,11 +51,12 @@
     "cypress": "13.3.3",
     "express": "4.18.1",
     "mocha": "10.2.0",
+    "nodemon": "3.0.1",
     "prettier": "3.0.3",
     "prettier-plugin-organize-imports": "3.2.3",
     "rimraf": "5.0.5",
     "ts-mocha": "10.0.0",
     "typescript": "5.2.2",
-    "nodemon": "3.0.1"
+    "ts-node": "^10.9.1"
   }
 }

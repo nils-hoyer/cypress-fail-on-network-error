@@ -7,7 +7,7 @@ import failOnNetworkError, {
     isRequestExcluded,
     mapToRequests,
     validateConfig,
-} from './../dist/index';
+} from './../dist/index.js';
 
 //@ts-ignore
 global['Cypress'] = { on: (f, s) => true };
