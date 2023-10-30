@@ -19,7 +19,7 @@ describe('Cypress', () => {
             // console.log(testResult);
             expect(testResult).to.match(/Passing:.*1/);
             expect(testResult).to.match(/Failing:.*2/);
-            expect(testResult).to.match(/cypress-fail-on-network-request/);
+            expect(testResult).to.match(/cypress-fail-on-network-error/);
         }
     });
 
@@ -32,7 +32,7 @@ describe('Cypress', () => {
         // console.log(testResult);
         expect(testResult).to.match(/Passing:.*2/);
         expect(testResult).to.match(/Failing:.*0/);
-        expect(testResult).to.not.match(/cypress-fail-on-network-request/);
+        expect(testResult).to.not.match(/cypress-fail-on-network-error/);
     });
 
     it('WHEN run multiple tests files THEN cypress run all files', async () => {

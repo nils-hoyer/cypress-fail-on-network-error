@@ -81,7 +81,7 @@ export default function failOnNetworkError(_config: Config = {}) {
             )
         ) {
             throw new AssertionError(
-                `cypress-fail-on-network-request:\n${JSON.stringify(requests)}`
+                `cypress-fail-on-network-error:\n${JSON.stringify(requests)}`
             );
         }
     });

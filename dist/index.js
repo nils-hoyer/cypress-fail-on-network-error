@@ -53,7 +53,7 @@ export default function failOnNetworkError(_config = {}) {
             return Object.assign(Object.assign({}, request), { status: event.status });
         });
         if (!isRequestExcluded(findRequest(requests, event.requestId), getConfig())) {
-            throw new AssertionError(`cypress-fail-on-network-request:\n${JSON.stringify(requests)}`);
+            throw new AssertionError(`cypress-fail-on-network-error:\n${JSON.stringify(requests)}`);
         }
     });
     Cypress.on('test:after:run', () => __awaiter(this, void 0, void 0, function* () {
