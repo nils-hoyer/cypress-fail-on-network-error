@@ -1,6 +1,6 @@
 # cypress-fail-on-network-error
 
-This Plugin observes network requests through cypress network events. Cypress test fails when a response or request error is received. For observing `console.error()` please check out [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
+This Plugin observes network requests through cypress network events. Cypress test will fail when the error conditions are met. For observing `console.error()` please check out [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
 
 ### Installation
 
@@ -76,7 +76,7 @@ Cypress.Commands.addAll({
 describe('example test', () => {
     it('should wait for requests to be solved', () => {
         cy.visit('url');
-        cy.wait(0).waitForRequests();
+        cy.waitForRequests();
     });
 });
 ```
