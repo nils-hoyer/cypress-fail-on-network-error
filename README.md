@@ -1,6 +1,6 @@
 # cypress-fail-on-network-error
 
-> :fire: **Don´t be shy and give it a try.**: This plugin is brand new! :fire:
+> :fire: **Don´t be shy and give it a try.** This plugin is brand new! :fire:
 
 The plugin observes all network requests from your configuration. Cypress test will fail when the error conditions are met. For observing `console.error()` please check out [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
 
