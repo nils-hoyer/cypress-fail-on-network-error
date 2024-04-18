@@ -1,6 +1,6 @@
 {
   "name": "cypress-fail-on-network-error",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "fail cypress test on network error",
   "type": "module",
   "main": "dist/index.js",
