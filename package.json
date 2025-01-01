@@ -52,7 +52,7 @@
     "@types/type-detect": "4.0.3",
     "cors": "2.8.5",
     "cypress": "13.16.1",
-    "express": "4.21.1",
+    "express": "4.21.2",
     "mocha": "10.8.2",
     "nodemon": "3.1.7",
     "prettier": "3.3.3",
