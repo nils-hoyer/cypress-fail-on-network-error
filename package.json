@@ -51,7 +51,7 @@
     "@types/mocha": "10.0.10",
     "@types/type-detect": "4.0.3",
     "cors": "2.8.5",
-    "cypress": "15.5.0",
+    "cypress": "15.7.0",
     "express": "5.1.0",
     "mocha": "11.7.5",
     "nodemon": "3.1.11",
