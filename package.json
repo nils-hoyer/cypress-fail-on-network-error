@@ -47,7 +47,6 @@
   },
   "devDependencies": {
     "@types/chai": "5.2.3",
-    "@types/expect": "24.3.2",
     "@types/mocha": "10.0.10",
     "@types/type-detect": "4.0.3",
     "cors": "2.8.5",

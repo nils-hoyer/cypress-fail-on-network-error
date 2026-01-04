@@ -1,7 +1,3 @@
-/// <reference types="cypress" />
-/// <reference types="cypress" />
-/// <reference types="cypress" />
-/// <reference types="cypress" />
 export type Config = {
     requests?: (string | Request)[];
 };
