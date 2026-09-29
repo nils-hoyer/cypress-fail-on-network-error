@@ -3,6 +3,8 @@
     "configurations": [
         {
             "args": [
+                "-n",
+                "loader=ts-node/esm",
                 "${workspaceFolder}/test/unitTest.ts",
                 "--timeout",
                 "60000",
@@ -10,13 +12,15 @@
             ],
             "internalConsoleOptions": "openOnSessionStart",
             "name": "mocha unit tests",
-            "program": "${workspaceFolder}/node_modules/ts-mocha/bin/ts-mocha",
+            "program": "${workspaceFolder}/node_modules/mocha/bin/mocha.js",
             "request": "launch",
             "skipFiles": ["<node_internals>/**"],
             "type": "node"
         },
         {
             "args": [
+                "-n",
+                "loader=ts-node/esm",
                 "${workspaceFolder}/test/integrationTest.ts",
                 "--timeout",
                 "60000",
@@ -24,7 +28,7 @@
             ],
             "internalConsoleOptions": "openOnSessionStart",
             "name": "mocha integration tests",
-            "program": "${workspaceFolder}/node_modules/ts-mocha/bin/ts-mocha",
+            "program": "${workspaceFolder}/node_modules/mocha/bin/mocha.js",
             "request": "launch",
             "skipFiles": ["<node_internals>/**"],
             "type": "node"
