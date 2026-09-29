@@ -1,8 +1,8 @@
 import * as chai from 'chai';
 import { AssertionError } from 'chai';
 import failOnNetworkError, {
-    Config,
-    RequestSession,
+    type Config,
+    type RequestSession,
     createConfig,
     isRequestExcluded,
     mapToRequests,
