@@ -1,89 +1,171 @@
 # cypress-fail-on-network-error
 
-> :fire: **Don´t be shy and give it a try.** This plugin is brand new! :fire:
+[![npm](https://img.shields.io/npm/v/cypress-fail-on-network-error)](https://www.npmjs.com/package/cypress-fail-on-network-error)
+[![CI](https://github.com/nils-hoyer/cypress-fail-on-network-error/actions/workflows/ci.yml/badge.svg)](https://github.com/nils-hoyer/cypress-fail-on-network-error/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/cypress-fail-on-network-error)](https://github.com/nils-hoyer/cypress-fail-on-network-error/blob/main/LICENSE)
 
-The plugin observes all network requests from your configuration. Cypress test will fail when the error conditions are met. For observing `console.error()` please check out [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
+Fail a Cypress test when your app makes a network request you did not expect, such as an API call that returns a `500`.
 
-### Installation
+The plugin watches the XHR and `fetch` requests Cypress reports while a test runs. When a request gets a response, or fails without one, the plugin compares it with the `requests` list in your config. If no entry matches, the test fails with an `AssertionError`.
 
+> **Note:** every request is checked, whatever its status. A `200` response fails the test too unless you exclude it. To fail only on error responses, exclude the success range with `{ status: { from: 200, to: 399 } }`.
+
+To fail tests on `console.error()` calls instead, see [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
+
+## Installation
+
+```sh
+npm install --save-dev cypress-fail-on-network-error
 ```
-npm install cypress-fail-on-network-error --save-dev
-```
 
-### Usage
+## Usage
 
-`cypress/support/e2e.js`
+Register the plugin once in your support file, `cypress/support/e2e.ts`:
 
-```js
-import failOnNetworkError, { Config, Request } from 'cypress-fail-on-network-error';
+```ts
+import failOnNetworkError, { Config } from 'cypress-fail-on-network-error';
 
 const config: Config = {
     requests: [
-        'simpleUrlToExclude',
-        { url: 'simpleUrlToExclude', method: 'GET', status: 400 },
-        { url: /urlToExclude/, method: 'POST', status: 428 },
-        { status: 430 },
+        // Don't fail on successful responses
         { status: { from: 200, to: 399 } },
+        // Ignore every request whose URL contains "analytics"
+        'analytics',
+        // Allow a 404 from one endpoint
+        { url: /\/api\/feature-flags/, method: 'GET', status: 404 },
+        // Allow a 409 from any POST request
+        { method: 'POST', status: 409 },
     ],
 };
 
-failOnNetworkError(config)
+failOnNetworkError(config);
 ```
 
-### Config
+In a JavaScript project (`e2e.js`), drop the `Config` import and the type annotation.
 
-| Parameter             | Default               | <div style="width:300px">Description</div>    |
-|---                    |---                    |---                                            |
-| `requests`     | `[]` | Exclude requests from throwing `AssertionError`. Types `string`, `RegExp`, `Request` are accepted. `string` and `request.url` will be converted to type `RegExp`. [String.match()](https://developer.mozilla.org/de/docs/Web/JavaScript/Reference/Global_Objects/String/match) will be used for matching. |                                   
+When a request is not excluded, the test fails with an error that starts with `cypress-fail-on-network-error:`. The error then lists every request seen in the current test as JSON (`requestId`, `method`, `url`, `status`).
 
-<br/>
+## What gets checked
 
-### Set config from cypress test 
-Use `failOnNetworkError` functions `getConfig()` and `setConfig()` with your own requirements. Detailed example implementation [cypress comands](https://github.com/nils-hoyer/cypress-fail-on-network-error/blob/main/cypress/support/e2e.ts#L14-L64) & [cypress test](https://github.com/nils-hoyer/cypress-fail-on-network-error/blob/main/cypress/e2e/shouldfailOnNetworkError.cy.ts#L1-L25). Note that the config will be resetted to initial config between tests.
-```js
+The plugin listens to the same network events Cypress uses for the request entries in its command log, which cover XHR and `fetch` requests. Page loads from `cy.visit()` and static assets such as scripts, stylesheets and images are not checked.
+
+## Config
+
+| Option     | Type                    | Default | Description                                                                               |
+| ---------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------- |
+| `requests` | `(string \| Request)[]` | `[]`    | Requests that must not fail the test. A request is excluded if it matches any entry. |
+
+A `string` entry is shorthand for `{ url: string }`. A `Request` entry can set any combination of the fields below. Every field you set must match, and a field you leave out matches any value.
+
+| Field    | Type                                              | Matches when                                                                                                                                                  |
+| -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `url`    | `string \| RegExp`                                | The pattern matches anywhere in the full request URL. A string is turned into a `RegExp`, so escape characters such as `.` and `?` to match them literally. |
+| `method` | `'GET' \| 'POST' \| 'PUT' \| 'DELETE' \| 'PATCH'` | The request method is exactly this value.                                                                                                                     |
+| `status` | `number \| { from: number; to: number }`          | The response status equals the number, or is within the range, including both ends.                                                                          |
+
+A request that fails without a response (for example, when the connection is refused) has no status. Only entries without `status` can exclude it.
+
+An invalid config, such as `status: '404'`, throws an `AssertionError` when you call `failOnNetworkError()` or `setConfig()`.
+
+## Change the config inside a test
+
+`failOnNetworkError()` returns `getConfig()` and `setConfig()`. Wrap them in custom commands to change the excluded requests for one test. After each test, the config goes back to the one you passed to `failOnNetworkError()`.
+
+- `setConfig()` replaces the whole config.
+- `getConfig()` returns the normalized config: string entries come back as `Request` objects, and a numeric `status` comes back as a `{ from, to }` range.
+
+```ts
+// cypress/support/e2e.ts
+import failOnNetworkError, {
+    Config,
+    Request,
+} from 'cypress-fail-on-network-error';
+
+const config: Config = {
+    requests: [{ status: { from: 200, to: 399 } }],
+};
+
 const { getConfig, setConfig } = failOnNetworkError(config);
 
 Cypress.Commands.addAll({
-    getConfigRequests: () => {
-        return cy.wrap(getConfig().requests);
-    },
+    getConfigRequests: () => cy.wrap(getConfig().requests),
     setConfigRequests: (requests: (string | Request)[]) => {
         setConfig({ ...getConfig(), requests });
     },
 });
+
+declare global {
+    namespace Cypress {
+        interface Chainable {
+            getConfigRequests(): Chainable<(string | Request)[]>;
+            setConfigRequests(requests: (string | Request)[]): Chainable<void>;
+        }
+    }
+}
 ```
 
-```js
-describe('example test', () => {
-    it('should set exclude requests', () => {
-        cy.setConfigRequests(['urlToExclude']);
-        cy.visit('url');
-    });
+Because `setConfigRequests` replaces the list, include the entries you still need:
+
+```ts
+it('tolerates an unavailable recommendations service', () => {
+    cy.setConfigRequests([
+        { status: { from: 200, to: 399 } },
+        { url: /\/api\/recommendations/, status: 503 },
+    ]);
+    cy.visit('/');
 });
 ```
 
-### Wait for all pending requests to be resolved
-Use `failOnNetworkError` function `waitForRequests()` to wait until all pending requests are resolved. The default timeout is 10000 ms which can be changed by overriding the default value `waitForRequests(5000)`. When reaching the timeout, Cypress test execution will continue without throwing an timeout exception.
-Detailed documenation for [cypress comands](https://github.com/nils-hoyer/cypress-fail-on-network-error/blob/main/cypress/support/e2e.ts#L13-L35) & [cypress test](https://github.com/nils-hoyer/cypress-fail-on-network-error/blob/main/cypress/e2e/shouldWaitForRequests.cy.ts).
+The repository's [support file](https://github.com/nils-hoyer/cypress-fail-on-network-error/blob/main/cypress/support/e2e.ts) and [example specs](https://github.com/nils-hoyer/cypress-fail-on-network-error/tree/main/cypress/e2e) show these commands in use.
 
-```js
-const { waitForRequests } = failOnNetworkError(config);
+## Wait for pending requests
+
+A response that arrives after a test has ended is not checked, so an error from a slow request can go unnoticed. `waitForRequests(timeout = 10000)` waits until every request seen in the current test has a response, checking every 500 ms. If the timeout passes first, the test continues without an error.
+
+Take `waitForRequests` from the same `failOnNetworkError()` call as the other functions. Calling `failOnNetworkError()` more than once registers duplicate listeners.
+
+```ts
+// cypress/support/e2e.ts
+const { getConfig, setConfig, waitForRequests } = failOnNetworkError(config);
 
 Cypress.Commands.addAll({
-    waitForRequests: () => waitForRequests(),
+    waitForRequests: (timeout?: number) => waitForRequests(timeout),
+});
+
+declare global {
+    namespace Cypress {
+        interface Chainable {
+            waitForRequests(timeout?: number): Chainable<void>;
+        }
+    }
+}
+```
+
+```ts
+it('checks every request the page makes', () => {
+    cy.visit('/');
+    cy.waitForRequests();
 });
 ```
 
-```js
-describe('example test', () => {
-    it('should wait for requests to be solved', () => {
-        cy.visit('url');
-        cy.waitForRequests();
-    });
-});
+## Contributing
+
+1. Open an issue that describes the problem and the behavior you expect.
+2. Open a pull request with the change and its tests. `npm run verify` must pass locally.
+
+### Local setup
+
+You need Node.js LTS and Chrome, because the integration tests run Cypress in headless Chrome.
+
+```sh
+npm ci
+npm run verify
 ```
 
+`npm run verify` runs the same checks as CI:
 
-### Contributing
-1. Create an project issue with proper description and expected behaviour
-2. Provide a PR with implementation and tests. Command `npm run verify` have to pass locally
+1. It builds the plugin into `dist/` and starts the test server on port 3000 in the background. The server keeps running after the command ends.
+2. It runs type checks and Prettier.
+3. It runs the unit tests, then the integration tests.
+
+`dist/` is committed to the repository, so include the rebuilt files in your pull request. While you work, `npm run dev` rebuilds on every change and `npm run test:ut` runs the unit tests alone.
