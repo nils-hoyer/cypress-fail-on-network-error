@@ -12,7 +12,7 @@
 - `test/integrationTest.ts`: runs `cypress run --browser chrome --headless` on specs in `cypress/e2e/` and asserts on the stdout summary (passing/failing counts and the `cypress-fail-on-network-error` error text).
 - `cypress/e2e/*.cy.ts`: fixture specs driven by the integration test. Several fail on purpose. Do not "fix" a failing spec; the integration test depends on the exact pass/fail counts. `shouldResetConfigBetweenTests.cy.ts` and `shouldWaitForRequests.cy.ts` are not run by `integrationTest.ts`.
 - `cypress/support/e2e.ts`: registers the plugin from `../../dist/index` and defines the `getConfigRequests`, `setConfigRequests` and `waitForRequests` custom commands used by the specs.
-- `backend/app.cjs` and `backend/index.html`: Express test server on port 3000.
+- `backend/app.cjs` and `backend/index.html`: Express test server on port 3000. `integrationTest.ts` starts it with the exported `start()` before the tests and closes it after them. `node backend/app.cjs` (`npm run build:be`) runs it on its own.
     - `GET /test?method=&status=&requests=&delay=` serves a page that fires `requests` XHRs at `http://127.0.0.1:3000/xhr/?status=&delay=`. All four query parameters are required.
     - `GET /xhr?status=&delay=` responds with `status` after `delay` milliseconds.
 - `types/`: legacy vendored typings that no tsconfig references. Leave them alone.
@@ -23,11 +23,11 @@
 - Use Node.js LTS (CI uses `lts/*`). Integration tests need Chrome installed.
 - `npm ci` installs dependencies.
 - `npm run verify` is what CI runs, and it must pass before a PR is merged. It runs, in order:
-    1. `build`: compiles `src/` to `dist/` and starts the test server in the background.
+    1. `build`: compiles `src/` to `dist/`.
     2. `lint`: `tsc` type checks for `src/`, `test/` and `cypress/`.
     3. `prettier:check`
     4. `test`: unit tests, then integration tests.
-- `npm run build` leaves the test server running on port 3000 after it finishes. Integration tests need it running.
+- The integration tests start the test server themselves and fail if port 3000 is already in use.
 - Tests run against `dist/`, not `src/`. Rebuild (`npm run build:fe`) before running tests after a source change.
 - `npm run test:ut` runs the unit tests only, which is the fast loop. `npm run test:it` is slow because it launches Cypress several times.
 - `npm run dev` rebuilds `dist/` on source changes and restarts the test server on backend changes.

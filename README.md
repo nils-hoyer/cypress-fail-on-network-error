@@ -164,8 +164,8 @@ npm run verify
 
 `npm run verify` runs the same checks as CI:
 
-1. It builds the plugin into `dist/` and starts the test server on port 3000 in the background. The server keeps running after the command ends.
+1. It builds the plugin into `dist/`.
 2. It runs type checks and Prettier.
-3. It runs the unit tests, then the integration tests.
+3. It runs the unit tests, then the integration tests. The integration tests start the test server on port 3000, so the port must be free.
 
 `dist/` is committed to the repository, so include the rebuilt files in your pull request. While you work, `npm run dev` rebuilds on every change and `npm run test:ut` runs the unit tests alone.

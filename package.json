@@ -9,12 +9,12 @@
     "dist/**/*"
   ],
   "scripts": {
-    "build": "npm run build:be & npm run build:fe",
-    "build:fe": "npx rimraf dist/ && tsc",
+    "build": "npm run build:fe",
+    "build:fe": "rimraf dist/ && tsc",
     "build:be": "node ./backend/app.cjs",
     "dev": "npm run dev:fe & npm run dev:be",
     "dev:fe": "nodemon --watch './src' --ext 'ts' --exec 'npm run build:fe'",
-    "dev:be": "nodemon --watch './backend/app.js' --ext 'js' --exec 'npm run build:be'",
+    "dev:be": "nodemon --watch './backend/app.cjs' --ext 'cjs' --exec 'npm run build:be'",
     "prettier": "prettier --write \"**/*\"",
     "prettier:check": "prettier --check \"**/*\"",
     "lint": "tsc --noEmit && tsc -p ./test/tsconfig.json && tsc -p ./cypress/tsconfig.json",
