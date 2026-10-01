@@ -7,7 +7,7 @@
 ## Repository layout
 
 - `src/index.ts`: the whole plugin. Default export `failOnNetworkError`, the types `Config`, `Request`, `Range` and `RequestSession`, and helper functions (`validateConfig`, `createConfig`, `mapToRequests`, `findRequest`, `isRequestExcluded`) that are exported so the unit tests can reach them.
-- `dist/`: compiled output. It is committed and is what npm publishes (`files` in `package.json`). Never edit it by hand. After changing `src/`, run `npm run build:fe` and commit the regenerated `dist/` files with the source change.
+- `dist/`: compiled output, ignored by git. npm publishes it (`files` in `package.json`), and the `prepack` script rebuilds it before every `npm pack` and `npm publish`. Never edit it by hand, and do not commit it.
 - `test/unitTest.ts`: mocha unit tests for the helpers. They import from `../dist/index.js` and stub `global.Cypress`.
 - `test/integrationTest.ts`: runs `cypress run --browser chrome --headless` on specs in `cypress/e2e/` and asserts on the stdout summary (passing/failing counts and the `cypress-fail-on-network-error` error text).
 - `cypress/e2e/*.cy.ts`: fixture specs driven by the integration test. Several fail on purpose. Do not "fix" a failing spec; the integration test depends on the exact pass/fail counts. `shouldResetConfigBetweenTests.cy.ts` and `shouldWaitForRequests.cy.ts` are not run by `integrationTest.ts`.
@@ -46,7 +46,7 @@
 
 ## Releases
 
-Merging a pull request that changes `version` in `package.json` publishes a release: `.github/workflows/release.yml` publishes the package to npm, then creates the git tag and the GitHub release with generated notes. A pull request that leaves the version alone ships with the next release.
+Merging a pull request that changes `version` in `package.json` publishes a release: on every push to `main`, `.github/workflows/release.yml` checks for a tag named after the version (without a `v` prefix, such as `1.0.6`). When there is none, it runs `npm run verify`, publishes the package to npm with trusted publishing (no token), then creates the tag and the GitHub release with generated notes. Each step skips work that is already done, so a failed run can be re-run. A pull request that leaves the version alone ships with the next release.
 
 Decide the release in every pull request, and add the matching label:
 

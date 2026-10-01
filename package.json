@@ -12,6 +12,7 @@
     "build": "npm run build:fe",
     "build:fe": "rimraf dist/ && tsc",
     "build:be": "node ./backend/app.cjs",
+    "prepack": "npm run build:fe",
     "dev": "npm run dev:fe & npm run dev:be",
     "dev:fe": "nodemon --watch './src' --ext 'ts' --exec 'npm run build:fe'",
     "dev:be": "nodemon --watch './backend/app.cjs' --ext 'cjs' --exec 'npm run build:be'",
