@@ -8,7 +8,7 @@ Fail a Cypress test when your app makes a network request you did not expect, su
 
 The plugin watches the XHR and `fetch` requests Cypress reports while a test runs. When a request gets a response, or fails without one, the plugin compares it with the `requests` list in your config. If no entry matches, the test fails with an `AssertionError`.
 
-> **Note:** every request is checked, whatever its status. A `200` response fails the test too unless you exclude it. To fail only on error responses, exclude the success range with `{ status: { from: 200, to: 399 } }`.
+> **Note:** every request is checked, whatever its status. A `200` response fails the test too unless you exclude it, for example with `{ status: 200 }`.
 
 To fail tests on `console.error()` calls instead, see [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
 
@@ -28,7 +28,7 @@ import failOnNetworkError, { Config } from 'cypress-fail-on-network-error';
 const config: Config = {
     requests: [
         // Don't fail on successful responses
-        { status: { from: 200, to: 399 } },
+        { status: 200 },
         // Ignore every request whose URL contains "analytics"
         'analytics',
         // Allow a 404 from one endpoint
@@ -82,7 +82,7 @@ import failOnNetworkError, {
 } from 'cypress-fail-on-network-error';
 
 const config: Config = {
-    requests: [{ status: { from: 200, to: 399 } }],
+    requests: [{ status: 200 }],
 };
 
 const { getConfig, setConfig } = failOnNetworkError(config);
@@ -109,7 +109,7 @@ Because `setConfigRequests` replaces the list, include the entries you still nee
 ```ts
 it('tolerates an unavailable recommendations service', () => {
     cy.setConfigRequests([
-        { status: { from: 200, to: 399 } },
+        { status: 200 },
         { url: /\/api\/recommendations/, status: 503 },
     ]);
     cy.visit('/');
