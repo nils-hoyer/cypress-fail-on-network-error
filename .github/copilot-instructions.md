@@ -42,7 +42,7 @@
 - Config validation uses `chai.expect` with `type-detect` and throws `AssertionError`. Follow the same pattern for new config options.
 - Keep the public API backward compatible: the default export's signature, the returned `{ getConfig, setConfig, waitForRequests }`, and the `Config`, `Request` and `Range` types. A breaking change needs a major version bump.
 - Keep the `cypress-fail-on-network-error:` prefix on thrown error messages. Integration tests and users match on it.
-- Renovate handles dependency updates (monthly, automerged). Do not bump dependencies unless the task asks for it.
+- Dependabot handles dependency updates (`.github/dependabot.yml`): monthly for npm and GitHub Actions, with npm minor and patch updates grouped into one pull request. `.github/workflows/dependabot-auto-merge.yml` turns on auto-merge for minor and patch updates, so they merge once CI passes; major updates wait for review. Dependabot pull requests do not bump the version, so they ship with the next release. Do not bump dependencies unless the task asks for it.
 
 ## Behavior to preserve
 
