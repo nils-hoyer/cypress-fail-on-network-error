@@ -44,6 +44,23 @@
 - Keep the `cypress-fail-on-network-error:` prefix on thrown error messages. Integration tests and users match on it.
 - Dependabot handles dependency updates (`.github/dependabot.yml`): monthly for npm and GitHub Actions, with npm minor and patch updates grouped into one pull request. `.github/workflows/dependabot-auto-merge.yml` turns on auto-merge for minor and patch updates, so they merge once CI passes; major updates wait for review. Dependabot pull requests do not bump the version, so they ship with the next release. Do not bump dependencies unless the task asks for it.
 
+## Releases
+
+Merging a pull request that changes `version` in `package.json` publishes a release: `.github/workflows/release.yml` publishes the package to npm, then creates the git tag and the GitHub release with generated notes. A pull request that leaves the version alone ships with the next release.
+
+Decide the release in every pull request, and add the matching label:
+
+| Release | Label             | When                                                                                                                                                 |
+| ------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| major   | `breaking-change` | Removes or renames an export, option or type; changes a default or the type of error thrown; raises the minimum Cypress or Node version.             |
+| minor   | `enhancement`     | Adds an option, export or behavior that existing configs do not notice. Stricter validation that only rejects configs that never worked also counts. |
+| patch   | `bug`             | Makes behavior match the documentation; updates a runtime dependency.                                                                                |
+| none    | `documentation`   | Changes only docs, tests, CI, dev dependencies, or refactors without a change in behavior. No version bump.                                          |
+
+- Choose the highest type among all changes merged since the last release, not just the current pull request's, because the bump releases all of them. For example, while a breaking change sits unreleased on `main`, the next bump must be major.
+- Bump with `npm version <type> --no-git-tag-version`, which updates `package.json` and `package-lock.json` and creates no tag. The release workflow creates the tag.
+- Give the pull request a plain, descriptive title, such as "Fix status ranges that never match", without a type prefix. The generated release notes list titles as written, grouped by label (`.github/release.yml`).
+
 ## Behavior to preserve
 
 - A string entry in `requests` is shorthand for `{ url }`. `url` values go through `new RegExp(url).test(requestUrl)`, so they match anywhere in the full URL.
