@@ -18,6 +18,8 @@ To fail tests on `console.error()` calls instead, see [cypress-fail-on-console-e
 npm install --save-dev cypress-fail-on-network-error
 ```
 
+Requires Cypress 8.4 or later.
+
 ## Usage
 
 Register the plugin once in your support file, `cypress/support/e2e.ts`:

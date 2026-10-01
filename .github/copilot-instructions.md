@@ -40,6 +40,7 @@
 - Add a unit test for any change to a helper in `src/index.ts`. Add an integration test and fixture spec for any change to runtime behavior inside Cypress.
 - The plugin runs inside the Cypress browser bundle. Keep runtime `dependencies` to `chai` and `type-detect`, and do not use Node-only APIs in `src/`.
 - Config validation uses `chai.expect` with `type-detect` and throws `AssertionError`. Follow the same pattern for new config options.
+- `package.json` declares `peerDependencies.cypress` as `>=8.4.0`, the oldest Cypress the plugin was tested on, and `engines.node` as `>=18`, which `chai` 6 needs. The `exports` map exposes only the package root and `package.json`. Raising either minimum or narrowing `exports` is a breaking change.
 - Keep the public API backward compatible: the default export's signature, the returned `{ getConfig, setConfig, waitForRequests }`, and the `Config`, `Request` and `Range` types. A breaking change needs a major version bump.
 - Keep the `cypress-fail-on-network-error:` prefix on thrown error messages. Integration tests and users match on it.
 - Dependabot handles dependency updates (`.github/dependabot.yml`): monthly for npm and GitHub Actions, with npm minor and patch updates grouped into one pull request. `.github/workflows/dependabot-auto-merge.yml` turns on auto-merge for minor and patch updates, so they merge once CI passes; major updates wait for review. Dependabot pull requests do not bump the version, so they ship with the next release. Do not bump dependencies unless the task asks for it.

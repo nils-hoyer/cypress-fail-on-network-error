@@ -5,6 +5,14 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist/**/*"
   ],
@@ -42,9 +50,15 @@
     "url": "https://github.com/nils-hoyer/cypress-fail-on-network-error/issues"
   },
   "homepage": "https://github.com/nils-hoyer/cypress-fail-on-network-error#readme",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "chai": "^6.0.0",
     "type-detect": "^4.0.8"
+  },
+  "peerDependencies": {
+    "cypress": ">=8.4.0"
   },
   "devDependencies": {
     "@types/chai": "5.2.3",
