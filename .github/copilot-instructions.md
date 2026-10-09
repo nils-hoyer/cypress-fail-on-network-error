@@ -43,23 +43,22 @@
 - `package.json` declares `peerDependencies.cypress` as `>=8.4.0`, the oldest Cypress the plugin was tested on, and `engines.node` as `>=18`, which `chai` 6 needs. The `exports` map exposes only the package root and `package.json`. Raising either minimum or narrowing `exports` is a breaking change.
 - Keep the public API backward compatible: the default export's signature, the returned `{ getConfig, setConfig, waitForRequests }`, and the `Config`, `Request` and `Range` types. A breaking change needs a major version bump.
 - Keep the `cypress-fail-on-network-error:` prefix on thrown error messages. Integration tests and users match on it.
-- Dependabot handles dependency updates (`.github/dependabot.yml`): monthly for npm and GitHub Actions, with npm minor and patch updates grouped into one pull request. `.github/workflows/dependabot-auto-merge.yml` turns on auto-merge for minor and patch updates, so they merge once CI passes; major updates wait for review. Dependabot pull requests do not bump the version, so they ship with the next release. Do not bump dependencies unless the task asks for it.
+- Dependabot handles dependency updates (`.github/dependabot.yml`): monthly for npm and GitHub Actions, with npm minor and patch updates grouped into one pull request. `.github/workflows/dependabot-auto-merge.yml` waits for CI on minor and patch updates and squash-merges them when it passes; major updates wait for review. `main` has no required checks (the Release workflow pushes to it), so the workflow waits for CI itself instead of using `gh pr merge --auto`. Dependency updates ship with the next release. Do not bump dependencies unless the task asks for it.
 
 ## Releases
 
-Merging a pull request that changes `version` in `package.json` publishes a release: on every push to `main`, `.github/workflows/release.yml` checks for a tag named after the version (without a `v` prefix, such as `1.0.6`). When there is none, it runs `npm run verify`, publishes the package to npm with trusted publishing (no token), then creates the tag and the GitHub release with generated notes. Each step skips work that is already done, so a failed run can be re-run. A pull request that leaves the version alone ships with the next release.
+Releases are started by hand: run `.github/workflows/release.yml` from the Actions tab on `main` and choose `patch`, `minor` or `major`. It runs CI, then `npm version`, which commits `Release <version>` and tags `<version>` without a `v` prefix, like the earlier tags. It pushes both to `main` together, publishes to npm with trusted publishing (OIDC, which also adds provenance) from the `npm` environment, and creates the GitHub release with generated notes. If the publish job fails, "Re-run failed jobs" publishes the tag that was already pushed instead of increasing the version again.
 
-Decide the release in every pull request, and add the matching label:
+Do not change `version` in `package.json` in a pull request; the Release workflow does that. Label every pull request with the release type it needs:
 
 | Release | Label             | When                                                                                                                                                 |
 | ------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | major   | `breaking-change` | Removes or renames an export, option or type; changes a default or the type of error thrown; raises the minimum Cypress or Node version.             |
 | minor   | `enhancement`     | Adds an option, export or behavior that existing configs do not notice. Stricter validation that only rejects configs that never worked also counts. |
 | patch   | `bug`             | Makes behavior match the documentation; updates a runtime dependency.                                                                                |
-| none    | `documentation`   | Changes only docs, tests, CI, dev dependencies, or refactors without a change in behavior. No version bump.                                          |
+| none    | `documentation`   | Changes only docs, tests, CI, dev dependencies, or refactors without a change in behavior. Ships with the next release.                              |
 
-- Choose the highest type among all changes merged since the last release, not just the current pull request's, because the bump releases all of them. For example, while a breaking change sits unreleased on `main`, the next bump must be major.
-- Bump with `npm version <type> --no-git-tag-version`, which updates `package.json` and `package-lock.json` and creates no tag. The release workflow creates the tag.
+- When running the Release workflow, choose the highest type among the pull requests merged since the last release. For example, while a breaking change sits unreleased on `main`, the next release must be major.
 - Give the pull request a plain, descriptive title, such as "Fix status ranges that never match", without a type prefix. The generated release notes list titles as written, grouped by label (`.github/release.yml`).
 
 ## Behavior to preserve

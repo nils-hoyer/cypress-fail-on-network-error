@@ -5,6 +5,8 @@ on:
         branches: [main]
     pull_request:
         branches: [main]
+    # the Release workflow runs CI before it releases
+    workflow_call:
 
 jobs:
     build:
@@ -18,17 +20,3 @@ jobs:
                   cache: 'npm'
             - run: npm ci
             - run: npm run verify
-
-    version:
-        if: github.event_name == 'pull_request'
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v7
-            - name: Check the version bump
-              env:
-                  BASE_REF: ${{ github.base_ref }}
-              run: |
-                  git fetch --depth=1 origin "$BASE_REF"
-                  base=$(git show FETCH_HEAD:package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).version')
-                  head=$(node -p 'require("./package.json").version')
-                  node .github/scripts/check-version.cjs "$base" "$head"

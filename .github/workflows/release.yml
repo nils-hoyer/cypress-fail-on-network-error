@@ -1,61 +1,96 @@
 name: Release
 
+# Run from the Actions tab on main. Increases the version, pushes the commit and tag,
+# publishes to npm with trusted publishing (OIDC) and creates the GitHub release.
 on:
-    push:
-        branches: [main]
+    workflow_dispatch:
+        inputs:
+            version:
+                description: Version increase
+                type: choice
+                options: [patch, minor, major]
+                default: patch
 
-concurrency:
-    group: release
-    cancel-in-progress: false
+concurrency: release
+
+permissions: {}
 
 jobs:
-    release:
+    test:
+        if: github.ref == 'refs/heads/main'
+        uses: ./.github/workflows/ci.yml
+        permissions:
+            contents: read
+
+    version:
+        needs: test
         runs-on: ubuntu-latest
         permissions:
             contents: write
-            id-token: write
+        outputs:
+            tag: ${{ steps.version.outputs.tag }}
         steps:
             - uses: actions/checkout@v7
-            - name: Check for an existing release
-              id: version
-              run: |
-                  version=$(node -p 'require("./package.json").version')
-                  echo "version=$version" >> "$GITHUB_OUTPUT"
-                  if git ls-remote --exit-code --tags origin "refs/tags/$version" > /dev/null; then
-                      echo "Tag $version exists: nothing to release."
-                      echo "released=true" >> "$GITHUB_OUTPUT"
-                  fi
-            - name: Node LTS
-              if: steps.version.outputs.released != 'true'
-              uses: actions/setup-node@v7
+            - uses: actions/setup-node@v7
               with:
                   node-version: lts/*
-                  cache: 'npm'
-                  registry-url: 'https://registry.npmjs.org'
-            - name: Update npm for trusted publishing
-              if: steps.version.outputs.released != 'true'
-              run: |
-                  if ! node -e 'const [a, b, c] = process.argv[1].split(".").map(Number); process.exit(a > 11 || (a === 11 && (b > 5 || (b === 5 && c >= 1))) ? 0 : 1)' "$(npm -v)"; then
-                      npm install -g npm@latest
-                  fi
-                  npm -v
-            - if: steps.version.outputs.released != 'true'
-              run: npm ci
-            - if: steps.version.outputs.released != 'true'
-              run: npm run verify
-            - name: Publish to npm
-              if: steps.version.outputs.released != 'true'
+            - name: Increase version, commit and tag
+              id: version
               env:
-                  VERSION: ${{ steps.version.outputs.version }}
+                  VERSION: ${{ inputs.version }}
               run: |
-                  if [ -n "$(npm view "cypress-fail-on-network-error@$VERSION" version)" ]; then
-                      echo "$VERSION is already on npm."
-                  else
-                      npm publish
-                  fi
-            - name: Create the GitHub release
-              if: steps.version.outputs.released != 'true'
+                  git config user.name 'github-actions[bot]'
+                  git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+                  # no "v" prefix, like the earlier tags
+                  tag=$(npm version "$VERSION" --tag-version-prefix='' --message 'Release %s')
+                  echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            # --atomic pushes both or neither. This fails before anything is published
+            # if main moved on since the run started or doesn't accept pushes from Actions.
+            - name: Push commit and tag
               env:
-                  VERSION: ${{ steps.version.outputs.version }}
+                  TAG: ${{ steps.version.outputs.tag }}
+              run: git push --atomic origin HEAD:main "refs/tags/$TAG"
+
+    publish:
+        needs: version
+        runs-on: ubuntu-latest
+        # must match the environment in the trusted publisher settings on npmjs.com.
+        # Only main may deploy to it.
+        environment: npm
+        permissions:
+            contents: read
+            id-token: write # npm trusted publishing
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  ref: ${{ needs.version.outputs.tag }}
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: lts/*
+                  registry-url: https://registry.npmjs.org
+            - name: Use npm 11.5.1 or later, which trusted publishing needs
+              run: npm install -g npm@latest
+            - run: npm ci
+              env:
+                  # the build only needs Cypress's types, not the app
+                  CYPRESS_INSTALL_BINARY: 0
+            # prepack builds dist/. Trusted publishing adds the provenance attestation.
+            - run: npm publish
+
+    github-release:
+        needs: [version, publish]
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            # the changelog lists the pull requests since the previous release, grouped by .github/release.yml
+            - name: Create GitHub release with changelog
+              env:
                   GH_TOKEN: ${{ github.token }}
-              run: gh release create "$VERSION" --target "$GITHUB_SHA" --generate-notes
+                  TAG: ${{ needs.version.outputs.tag }}
+              run: >
+                  gh release create "$TAG"
+                  --repo "$GITHUB_REPOSITORY"
+                  --title "$TAG"
+                  --generate-notes
+                  --verify-tag
