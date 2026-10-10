@@ -5,16 +5,25 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist/**/*"
   ],
   "scripts": {
-    "build": "npm run build:be & npm run build:fe",
-    "build:fe": "npx rimraf dist/ && tsc",
+    "build": "npm run build:fe",
+    "build:fe": "rimraf dist/ && tsc",
     "build:be": "node ./backend/app.cjs",
+    "prepack": "npm run build:fe",
     "dev": "npm run dev:fe & npm run dev:be",
     "dev:fe": "nodemon --watch './src' --ext 'ts' --exec 'npm run build:fe'",
-    "dev:be": "nodemon --watch './backend/app.js' --ext 'js' --exec 'npm run build:be'",
+    "dev:be": "nodemon --watch './backend/app.cjs' --ext 'cjs' --exec 'npm run build:be'",
     "prettier": "prettier --write \"**/*\"",
     "prettier:check": "prettier --check \"**/*\"",
     "lint": "tsc --noEmit && tsc -p ./test/tsconfig.json && tsc -p ./cypress/tsconfig.json",
@@ -41,9 +50,15 @@
     "url": "https://github.com/nils-hoyer/cypress-fail-on-network-error/issues"
   },
   "homepage": "https://github.com/nils-hoyer/cypress-fail-on-network-error#readme",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "chai": "^6.0.0",
     "type-detect": "^4.0.8"
+  },
+  "peerDependencies": {
+    "cypress": ">=8.4.0"
   },
   "devDependencies": {
     "@types/chai": "5.2.3",
