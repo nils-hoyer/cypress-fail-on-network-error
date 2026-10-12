@@ -91,7 +91,7 @@ For TypeScript, see the command declarations in this repository's [support file]
 
 ## Wait for pending requests
 
-A response that arrives after a test has ended is not checked. To check slow requests too, wrap `waitForRequests()` in a command. Take it from the same `failOnNetworkError()` call as `getConfig()` and `setConfig()`, because each call registers its own listeners.
+A response that arrives after the test's last command is not checked. To check slow requests too, wrap `waitForRequests()` in a command. Take it from the same `failOnNetworkError()` call as `getConfig()` and `setConfig()`, because each call registers its own listeners.
 
 ```ts
 const { getConfig, setConfig, waitForRequests } = failOnNetworkError(config);
