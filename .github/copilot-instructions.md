@@ -52,12 +52,12 @@ Releases are started by hand: run `.github/workflows/release.yml` from the Actio
 
 Do not change `version` in `package.json` in a pull request; the Release workflow does that. Label every pull request with the release type it needs:
 
-| Release | Label             | When                                                                                                                                                 |
-| ------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| major   | `breaking-change` | Removes or renames an export, option or type; changes a default or the type of error thrown; raises the minimum Cypress or Node version.             |
-| minor   | `enhancement`     | Adds an option, export or behavior that existing configs do not notice. Stricter validation that only rejects configs that never worked also counts. |
-| patch   | `bug`             | Makes behavior match the documentation; updates a runtime dependency.                                                                                |
-| none    | `documentation`   | Changes only docs, tests, CI, dev dependencies, or refactors without a change in behavior. Ships with the next release.                              |
+| Release | Label             | When                                                                                                                                                                   |
+| ------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| major   | `breaking-change` | Removes or renames an export, option or type; changes a default or the type of error thrown when a request fails the test; raises the minimum Cypress or Node version. |
+| minor   | `enhancement`     | Adds an option, export or behavior that existing configs do not notice. Stricter validation that only rejects configs that never worked also counts.                   |
+| patch   | `bug`             | Makes behavior match the documentation; updates a runtime dependency.                                                                                                  |
+| none    | `documentation`   | Changes only docs, tests, CI, dev dependencies, or refactors without a change in behavior. Ships with the next release.                                                |
 
 - When running the Release workflow, choose the highest type among the pull requests merged since the last release. For example, while a breaking change sits unreleased on `main`, the next release must be major.
 - Give the pull request a plain, descriptive title, such as "Fix status ranges that never match", without a type prefix. The generated release notes list titles as written, grouped by label (`.github/release.yml`).
