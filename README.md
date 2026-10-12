@@ -45,7 +45,7 @@ failOnNetworkError(config);
 
 In a JavaScript project (`e2e.js`), drop the `Config` import and the type annotation.
 
-When a request is not excluded, the test fails with an error that starts with `cypress-fail-on-network-error:`. The error then lists every request seen in the current test as JSON (`requestId`, `method`, `url`, `status`).
+When a request is not excluded, the test fails with an error that starts with `cypress-fail-on-network-error:`. The error then lists every request seen in the current test as JSON (`requestId`, `method`, `url`, `status`, and `error` with the browser's message for a request that failed without a response).
 
 ## What gets checked
 

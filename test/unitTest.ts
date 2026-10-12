@@ -92,6 +92,53 @@ describe('request:event handler', () => {
 
         chai.expect(() => responseReceived('1', 500)).to.not.throw();
     });
+
+    [{}, { requests: ['foo'] }].forEach((config: Config) => {
+        it(`WHEN request error belongs to a request from before test:after:run with config ${JSON.stringify(config)} THEN expect it to be ignored`, () => {
+            failOnNetworkError(config);
+
+            incomingRequest('1', 'GET', 'http://foo');
+            testAfterRun();
+
+            chai.expect(() =>
+                requestError('1', 'socket hang up')
+            ).to.not.throw();
+        });
+    });
+
+    it('WHEN event is not a request event THEN expect it to be ignored', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+
+        chai.expect(() =>
+            emit('request:event', 'unknown:event', { requestId: '1' })
+        ).to.not.throw();
+    });
+
+    it('WHEN request error matches no entry THEN expect error message in assertion error', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+
+        chai.expect(() => requestError('1', 'socket hang up'))
+            .to.throw(AssertionError)
+            .with.property('message')
+            .that.contains('socket hang up');
+    });
+});
+
+describe('waitForRequests()', () => {
+    it('WHEN request failed without a response THEN expect it to resolve before the timeout', async () => {
+        const { waitForRequests } = failOnNetworkError({ requests: ['foo'] });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        requestError('1', 'socket hang up');
+
+        const start = Date.now();
+        await (waitForRequests(1000) as unknown as Promise<void>);
+        chai.expect(Date.now() - start).to.be.lessThan(500);
+    });
 });
 
 describe('test:after:run handler', () => {

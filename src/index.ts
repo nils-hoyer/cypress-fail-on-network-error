@@ -34,7 +34,8 @@ export default function failOnNetworkError(_config: Config = {}) {
     const waitForRequests = (timeout = 10000): Cypress.Chainable<any> => {
         const requestsDone = () =>
             getRequests().every(
-                (request: RequestSession) => request.status !== undefined
+                (request: RequestSession) =>
+                    request.status !== undefined || request.error !== undefined
             );
 
         return cy.wrap(waitUntil(requestsDone, timeout), {
@@ -45,17 +46,6 @@ export default function failOnNetworkError(_config: Config = {}) {
     setConfig(_config);
 
     Cypress.on('request:event', (eventName, event) => {
-        const subscribedEvents = [
-            'incoming:request',
-            'request:error',
-            'response:received',
-        ];
-        const unknownResponse =
-            eventName === 'response:received' &&
-            findRequest(requests, event.requestId) === undefined;
-
-        if (!subscribedEvents || unknownResponse) return;
-
         if (eventName === 'incoming:request') {
             requests.push({
                 requestId: event.requestId,
@@ -66,12 +56,24 @@ export default function failOnNetworkError(_config: Config = {}) {
             return;
         }
 
+        const subscribedEvents = ['request:error', 'response:received'];
+        // a request from an earlier test was cleared by test:after:run
+        const unknownRequest =
+            findRequest(requests, event.requestId) === undefined;
+
+        if (subscribedEvents.indexOf(eventName) === -1 || unknownRequest)
+            return;
+
         requests = requests.map((request: RequestSession) => {
             if (request.requestId !== event.requestId) return request;
-            return {
-                ...request,
-                status: event.status,
-            };
+            return eventName === 'response:received'
+                ? { ...request, status: event.status }
+                : {
+                      ...request,
+                      error:
+                          event.error?.message ??
+                          'request failed without a response',
+                  };
         });
 
         if (
@@ -207,4 +209,6 @@ export type RequestSession = {
     method: string;
     url: string;
     status?: number;
+    // set when the request failed without a response
+    error?: string;
 };
