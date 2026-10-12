@@ -30,6 +30,39 @@ const requestError = (requestId: string, message: string) =>
 
 const testAfterRun = () => emit('test:after:run');
 
+// a minimal cy command queue: commands run in order when runCommands() is
+// called, and a command fails when it takes longer than its timeout
+type Command = { run: (subject: unknown) => unknown; timeout: number };
+let commands: Command[] = [];
+
+const chainable = {
+    then: (
+        options: { timeout?: number },
+        callback: (subject: unknown) => unknown
+    ) => {
+        commands.push({ run: callback, timeout: options.timeout ?? 4000 });
+        return chainable;
+    },
+};
+
+const runCommands = async () => {
+    let subject: unknown;
+    for (const { run, timeout } of commands) {
+        let timer: NodeJS.Timeout | undefined;
+        const timedOut = new Promise((_, reject) => {
+            timer = setTimeout(
+                () =>
+                    reject(new Error(`command timed out after ${timeout} ms`)),
+                timeout
+            );
+        });
+        subject = await Promise.race([run(subject), timedOut]);
+        clearTimeout(timer);
+    }
+    commands = [];
+    return subject;
+};
+
 beforeEach(() => {
     listeners = {};
     (globalThis as any).Cypress = {
@@ -38,7 +71,16 @@ beforeEach(() => {
         },
         Promise,
     };
-    (globalThis as any).cy = { wrap: (value: unknown) => value };
+    commands = [];
+    (globalThis as any).cy = {
+        wrap: (value: unknown, options: { timeout?: number } = {}) => {
+            commands.push({
+                run: () => value,
+                timeout: options.timeout ?? 4000,
+            });
+            return chainable;
+        },
+    };
 });
 
 describe('failOnNetworkError()', () => {
@@ -128,16 +170,42 @@ describe('request:event handler', () => {
     });
 });
 
-describe('waitForRequests()', () => {
+describe('waitForRequests()', function () {
+    this.timeout(5000);
+
     it('WHEN request failed without a response THEN expect it to resolve before the timeout', async () => {
         const { waitForRequests } = failOnNetworkError({ requests: ['foo'] });
 
         incomingRequest('1', 'GET', 'http://foo');
         requestError('1', 'socket hang up');
+        waitForRequests(1000);
 
         const start = Date.now();
-        await (waitForRequests(1000) as unknown as Promise<void>);
+        await runCommands();
         chai.expect(Date.now() - start).to.be.lessThan(500);
+    });
+
+    it('WHEN request is still pending at the timeout THEN expect it to resolve without failing', async () => {
+        const { waitForRequests } = failOnNetworkError({ requests: ['foo'] });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        waitForRequests(1200);
+
+        const start = Date.now();
+        await runCommands();
+        chai.expect(Date.now() - start).to.be.within(1200, 1400);
+    });
+
+    it('WHEN request is made after waitForRequests is called THEN expect it to wait for that request', async () => {
+        const { waitForRequests } = failOnNetworkError({ requests: ['foo'] });
+
+        waitForRequests(2000);
+        incomingRequest('1', 'GET', 'http://foo');
+        setTimeout(() => responseReceived('1', 200), 300);
+
+        const start = Date.now();
+        await runCommands();
+        chai.expect(Date.now() - start).to.be.within(300, 1000);
     });
 });
 

@@ -19,7 +19,7 @@ Cypress.Commands.addAll({
     setConfigRequests: (requests: (string | Request)[]) => {
         setConfig({ ...getConfig(), requests });
     },
-    waitForRequests: () => waitForRequests(),
+    waitForRequests: (timeout?: number) => waitForRequests(timeout),
 });
 
 declare global {
@@ -27,7 +27,7 @@ declare global {
         interface Chainable {
             getConfigRequests(): Chainable<any>;
             setConfigRequests(requests: (string | Request)[]): Chainable<void>;
-            waitForRequests(): Chainable<void>;
+            waitForRequests(timeout?: number): Chainable<void>;
         }
     }
 }

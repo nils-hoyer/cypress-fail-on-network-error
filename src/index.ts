@@ -38,9 +38,13 @@ export default function failOnNetworkError(_config: Config = {}) {
                     request.status !== undefined || request.error !== undefined
             );
 
-        return cy.wrap(waitUntil(requestsDone, timeout), {
-            timeout: timeout + 100,
-        });
+        // create the promise when the command runs, not when it is queued,
+        // and give Cypress's command timeout slack beyond our own timeout
+        return cy
+            .wrap(null, { log: false })
+            .then({ timeout: timeout + 1000 }, () =>
+                waitUntil(requestsDone, timeout)
+            );
     };
 
     setConfig(_config);
@@ -190,18 +194,17 @@ export const isRequestExcluded = (
 };
 
 const waitUntil = (predicate: () => boolean, timeout: number) => {
-    const startTime = new Date().getTime();
-    const isTimeUp = (startTime: number, timeout: number) =>
-        new Date().getTime() > startTime + timeout;
+    const endTime = new Date().getTime() + timeout;
 
-    const poll = (resolve: any) => {
-        if (predicate() || isTimeUp(startTime, timeout)) {
+    const poll = (resolve: () => void) => {
+        const remaining = endTime - new Date().getTime();
+        if (predicate() || remaining <= 0) {
             resolve();
         } else {
-            setTimeout(() => poll(resolve), 500);
+            setTimeout(() => poll(resolve), Math.min(500, remaining));
         }
     };
-    return new Cypress.Promise(poll);
+    return new Cypress.Promise<void>(poll);
 };
 
 export type RequestSession = {
