@@ -1,17 +1,23 @@
 describe('shouldFailOnRequestError', () => {
-    it('should fail on a request error', () => {
-        cy.setConfigRequests([]);
-        cy.visit(
-            'http://localhost:3000/test?method=get&status=none&requests=1&delay=0'
-        );
-        cy.wait(1000);
+    beforeEach(() => {
+        cy.visit('/');
     });
 
-    it('should pass on an excluded request error', () => {
+    it('should fail on an XHR without a response', () => {
+        cy.setConfigRequests([]);
+        cy.xhr('/xhr?status=none');
+        cy.waitForRequests();
+    });
+
+    it('should fail on a fetch without a response', () => {
+        cy.setConfigRequests([]);
+        cy.fetch('/xhr?status=none');
+        cy.waitForRequests();
+    });
+
+    it('should pass on an excluded request without a response', () => {
         cy.setConfigRequests(['/xhr']);
-        cy.visit(
-            'http://localhost:3000/test?method=get&status=none&requests=1&delay=0'
-        );
-        cy.wait(1000);
+        cy.fetch('/xhr?status=none');
+        cy.waitForRequests();
     });
 });

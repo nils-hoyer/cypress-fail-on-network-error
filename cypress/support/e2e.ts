@@ -20,6 +20,20 @@ Cypress.Commands.addAll({
         setConfig({ ...getConfig(), requests });
     },
     waitForRequests: (timeout?: number) => waitForRequests(timeout),
+    // make a request from the page without waiting for the response
+    fetch: (url: string, init?: RequestInit) => {
+        cy.window({ log: false }).then((win) => {
+            // a request without a response rejects, which is not this test's error
+            win.fetch(url, init).catch(() => {});
+        });
+    },
+    xhr: (url: string, method = 'GET') => {
+        cy.window({ log: false }).then((win) => {
+            const request = new win.XMLHttpRequest();
+            request.open(method, url);
+            request.send();
+        });
+    },
 });
 
 declare global {
@@ -28,6 +42,8 @@ declare global {
             getConfigRequests(): Chainable<any>;
             setConfigRequests(requests: (string | Request)[]): Chainable<void>;
             waitForRequests(timeout?: number): Chainable<void>;
+            fetch(url: string, init?: RequestInit): Chainable<void>;
+            xhr(url: string, method?: string): Chainable<void>;
         }
     }
 }
