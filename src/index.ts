@@ -22,6 +22,8 @@ export default function failOnNetworkError(_config: Config = {}) {
     let config: Required<Config>;
     let originConfig: Required<Config>;
     let requests: RequestSession[] = [];
+    // set when a request matched no entry, until the next command:end throws
+    let requestFailed = false;
 
     const getRequests = () => requests;
 
@@ -93,13 +95,23 @@ export default function failOnNetworkError(_config: Config = {}) {
                 getConfig()
             )
         ) {
-            throw new AssertionError(`${prefix}\n${JSON.stringify(requests)}`);
+            requestFailed = true;
         }
+    });
+
+    // request:event arrives from the server outside the command queue, where
+    // a thrown error is an uncaught exception that uncaught:exception handlers
+    // can hide. command:end runs inside the queue and fails the command.
+    Cypress.on('command:end', () => {
+        if (!requestFailed) return;
+        requestFailed = false;
+        throw new AssertionError(`${prefix}\n${JSON.stringify(requests)}`);
     });
 
     Cypress.on('test:after:run', async () => {
         setConfig(originConfig as Config);
         requests = [];
+        requestFailed = false;
     });
 
     return {

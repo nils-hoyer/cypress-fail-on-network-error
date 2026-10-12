@@ -142,6 +142,27 @@ describe('Cypress', () => {
         }
     });
 
+    it('WHEN the spec ignores uncaught exceptions THEN cypress still fails with the plugin error', async () => {
+        const spec =
+            ' --spec ./cypress/e2e/shouldFailDespiteUncaughtExceptionHandler.cy.ts';
+        let testResult = '';
+
+        try {
+            await exec(cypressRun + spec);
+        } catch (error: any) {
+            testResult = stripColors(error.stdout);
+        } finally {
+            expect(testResult).to.match(/Passing:\s+0\s/);
+            expect(testResult).to.match(/Failing:\s+1\s/);
+            expect(testResult).to.match(
+                /AssertionError: cypress-fail-on-network-error:/
+            );
+            expect(testResult).to.not.match(
+                /originated from your application code/
+            );
+        }
+    });
+
     it('WHEN getConfig().requests is changed in a test THEN cypress uses the original config in the next test', async () => {
         const spec = ' --spec ./cypress/e2e/shouldNotLeakConfigChanges.cy.ts';
         let testResult = '';
