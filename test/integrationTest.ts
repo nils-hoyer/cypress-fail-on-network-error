@@ -96,4 +96,16 @@ describe('Cypress', () => {
             );
         }
     });
+
+    it('WHEN waitForRequests times out with a request still pending THEN cypress continues and passes', async () => {
+        const spec =
+            ' --spec ./cypress/e2e/shouldContinueAfterWaitTimeout.cy.ts';
+
+        const { stdout } = await exec(cypressRun + spec);
+        const testResult = stripColors(stdout);
+
+        expect(testResult).to.match(/Passing:\s+1\s/);
+        expect(testResult).to.match(/Failing:\s+0\s/);
+        expect(testResult).to.not.match(/cypress-fail-on-network-error/);
+    });
 });
