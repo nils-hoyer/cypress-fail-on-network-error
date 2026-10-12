@@ -2,6 +2,7 @@ import * as chai from 'chai';
 import { AssertionError } from 'chai';
 import failOnNetworkError, {
     type Config,
+    type Request,
     type RequestSession,
     createConfig,
     isRequestExcluded,
@@ -9,8 +10,36 @@ import failOnNetworkError, {
     validateConfig,
 } from './../dist/index.js';
 
-//@ts-ignore
-global['Cypress'] = { on: (f, s) => true };
+type Listener = (...args: any[]) => unknown;
+let listeners: Record<string, Listener[]> = {};
+
+const emit = (eventName: string, ...args: unknown[]) =>
+    listeners[eventName]?.forEach((listener) => listener(...args));
+
+const incomingRequest = (requestId: string, method: string, url: string) =>
+    emit('request:event', 'incoming:request', { requestId, method, url });
+
+const responseReceived = (requestId: string, status: number) =>
+    emit('request:event', 'response:received', { requestId, status });
+
+const requestError = (requestId: string, message: string) =>
+    emit('request:event', 'request:error', {
+        requestId,
+        error: { message },
+    });
+
+const testAfterRun = () => emit('test:after:run');
+
+beforeEach(() => {
+    listeners = {};
+    (globalThis as any).Cypress = {
+        on: (eventName: string, listener: Listener) => {
+            (listeners[eventName] ??= []).push(listener);
+        },
+        Promise,
+    };
+    (globalThis as any).cy = { wrap: (value: unknown) => value };
+});
 
 describe('failOnNetworkError()', () => {
     it('WHEN failOnNetworkError is created with Config THEN expect no error', () => {
@@ -21,6 +50,62 @@ describe('failOnNetworkError()', () => {
     });
     it('WHEN failOnNetworkError is created with no Config THEN expect no error', () => {
         failOnNetworkError();
+    });
+});
+
+describe('request:event handler', () => {
+    it('WHEN response is excluded THEN expect no error', () => {
+        failOnNetworkError({ requests: [{ url: 'foo', status: 200 }] });
+
+        incomingRequest('1', 'GET', 'http://foo');
+
+        chai.expect(() => responseReceived('1', 200)).to.not.throw();
+    });
+
+    it('WHEN response matches no entry THEN expect assertion error with prefix', () => {
+        failOnNetworkError({ requests: [{ url: 'foo', status: 200 }] });
+
+        incomingRequest('1', 'GET', 'http://foo');
+
+        chai.expect(() => responseReceived('1', 500))
+            .to.throw(AssertionError)
+            .with.property('message')
+            .that.match(/^cypress-fail-on-network-error:/);
+    });
+
+    it('WHEN request error matches no entry THEN expect assertion error with prefix', () => {
+        failOnNetworkError({ requests: [{ status: 200 }] });
+
+        incomingRequest('1', 'GET', 'http://foo');
+
+        chai.expect(() => requestError('1', 'socket hang up'))
+            .to.throw(AssertionError)
+            .with.property('message')
+            .that.match(/^cypress-fail-on-network-error:/);
+    });
+
+    it('WHEN response belongs to a request from before test:after:run THEN expect it to be ignored', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        testAfterRun();
+
+        chai.expect(() => responseReceived('1', 500)).to.not.throw();
+    });
+});
+
+describe('test:after:run handler', () => {
+    it('WHEN config was changed during a test THEN expect original config after test:after:run', () => {
+        const { getConfig, setConfig } = failOnNetworkError({
+            requests: ['foo'],
+        });
+
+        setConfig({ requests: ['bar'] });
+        testAfterRun();
+
+        chai.expect(getConfig()).to.deep.equal(
+            createConfig({ requests: ['foo'] })
+        );
     });
 });
 
@@ -63,8 +148,7 @@ describe('mapToRequests()', () => {
             { status: { from: 200, to: 399 } },
         ] as (string | Request)[];
 
-        const mappedRequests = mapToRequests(requests as any);
-        debugger;
+        const mappedRequests = mapToRequests(requests);
         chai.expect(mappedRequests).to.deep.equal([
             { url: 'url1', status: undefined, method: undefined },
             { url: 'url2', status: { from: 400, to: 400 }, method: 'GET' },
