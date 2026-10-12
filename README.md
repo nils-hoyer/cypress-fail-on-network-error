@@ -26,7 +26,11 @@ failOnNetworkError({
 });
 ```
 
-Every XHR and `fetch` request is checked, whatever its status, so without the entry above a `200` fails the test too. When a request gets a response, or fails without one, and no entry in `requests` matches it, the test fails with an error that starts with `cypress-fail-on-network-error:` and lists the requests of the current test. Page loads from `cy.visit()` and scripts, stylesheets and images are not checked.
+Every XHR and `fetch` request is checked, whatever its status, so without the entry above a `200` fails the test too. Page loads from `cy.visit()` and scripts, stylesheets and images are not checked.
+
+When a request gets a response, or fails without one, and no entry in `requests` matches it, the test fails with an error that starts with `cypress-fail-on-network-error:` and lists the requests of the current test:
+
+![A failed request in the Cypress command log and the failed test's error](./docs/commandLog.png)
 
 ## Config (optional)
 
