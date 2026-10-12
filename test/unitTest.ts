@@ -222,6 +222,28 @@ describe('test:after:run handler', () => {
             createConfig({ requests: ['foo'] })
         );
     });
+
+    it('WHEN requests were added to getConfig() during a test THEN expect them gone after test:after:run', () => {
+        const { getConfig } = failOnNetworkError({ requests: ['foo'] });
+
+        getConfig().requests.push('bar');
+        testAfterRun();
+
+        chai.expect(getConfig()).to.deep.equal(
+            createConfig({ requests: ['foo'] })
+        );
+    });
+
+    it('WHEN an entry of getConfig() was changed during a test THEN expect the original entry after test:after:run', () => {
+        const { getConfig } = failOnNetworkError({ requests: ['foo'] });
+
+        (getConfig().requests[0] as Request).url = 'bar';
+        testAfterRun();
+
+        chai.expect(getConfig()).to.deep.equal(
+            createConfig({ requests: ['foo'] })
+        );
+    });
 });
 
 describe('validateConfig()', () => {
