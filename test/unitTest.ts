@@ -16,8 +16,18 @@ let listeners: Record<string, Listener[]> = {};
 const emit = (eventName: string, ...args: unknown[]) =>
     listeners[eventName]?.forEach((listener) => listener(...args));
 
-const incomingRequest = (requestId: string, method: string, url: string) =>
-    emit('request:event', 'incoming:request', { requestId, method, url });
+const incomingRequest = (
+    requestId: string,
+    method: string,
+    url: string,
+    resourceType?: string
+) =>
+    emit('request:event', 'incoming:request', {
+        requestId,
+        method,
+        url,
+        resourceType,
+    });
 
 const responseReceived = (requestId: string, status: number) =>
     emit('request:event', 'response:received', { requestId, status });
@@ -145,6 +155,30 @@ describe('request:event handler', () => {
             chai.expect(() =>
                 requestError('1', 'socket hang up')
             ).to.not.throw();
+        });
+    });
+
+    ['script', 'stylesheet', 'image', 'document', 'other'].forEach(
+        (resourceType) => {
+            it(`WHEN resource type is ${resourceType} THEN expect the request to be ignored`, () => {
+                failOnNetworkError();
+
+                incomingRequest('1', 'GET', 'http://foo', resourceType);
+
+                chai.expect(() => responseReceived('1', 500)).to.not.throw();
+            });
+        }
+    );
+
+    ['xhr', 'fetch', undefined].forEach((resourceType) => {
+        it(`WHEN resource type is ${resourceType} THEN expect the request to be checked`, () => {
+            failOnNetworkError();
+
+            incomingRequest('1', 'GET', 'http://foo', resourceType);
+
+            chai.expect(() => responseReceived('1', 500)).to.throw(
+                AssertionError
+            );
         });
     });
 

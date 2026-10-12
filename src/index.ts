@@ -52,6 +52,11 @@ export default function failOnNetworkError(_config: Config = {}) {
 
     Cypress.on('request:event', (eventName, event) => {
         if (eventName === 'incoming:request') {
+            // check only XHR and fetch, like Cypress's command log; a request
+            // without a resource type is checked as before
+            const checkedResourceTypes = ['xhr', 'fetch', undefined];
+            if (checkedResourceTypes.indexOf(event.resourceType) === -1) return;
+
             requests.push({
                 requestId: event.requestId,
                 method: event.method,
