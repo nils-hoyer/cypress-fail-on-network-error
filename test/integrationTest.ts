@@ -1,197 +1,103 @@
 import { expect } from 'chai';
-import * as process from 'child_process';
+import cypress from 'cypress';
+import { readdirSync } from 'fs';
+import { basename } from 'path';
 import type { Server } from 'http';
-import * as util from 'util';
+import type { AddressInfo } from 'net';
 import { start } from '../backend/app.cjs';
 
-const exec = util.promisify(process.exec);
-// Cypress colors its output in CI, which puts escape codes between "Passing:" and the count
-const stripColors = (output: string) => output.replace(/\u001b\[[0-9;]*m/g, '');
-const cypressRun =
-    'cypress run --browser chrome --headless --config-file ./cypress/cypress.config.ts';
+type RunResult = CypressCommandLine.RunResult;
+type TestResult = CypressCommandLine.TestResult;
+
+// Electron, Cypress's default browser, ships with Cypress; BROWSER=chrome or
+// BROWSER=firefox runs the specs in another browser
+const browser = process.env.BROWSER ?? 'electron';
+const specs = readdirSync('cypress/e2e').filter((file) =>
+    file.endsWith('.cy.ts')
+);
+
+// checks on the error beyond the plugin prefix, by describe and test title
+const errorChecks: Record<string, (error: string) => void> = {
+    'shouldFailOnRequestError > should fail on an XHR without a response': (
+        error
+    ) => expect(error).to.match(/"error":"/),
+    'shouldFailOnRequestError > should fail on a fetch without a response': (
+        error
+    ) => expect(error).to.match(/"error":"/),
+    'shouldNormalizeAndValidateConfig > should fail when an entry has an unknown key':
+        (error) =>
+            expect(error).to.match(
+                /^Error: cypress-fail-on-network-error: config\.requests\[0\] has unknown keys/
+            ),
+    'shouldCheckOnlyXhrAndFetch > should fail on the XHR but not report the script, stylesheet and image':
+        (error) => {
+            expect(error).to.match(/\/xhr\?status=200/);
+            expect(error).to.not.match(/resource\.(css|js|svg)/);
+        },
+};
+
+const expectedState = (title: string) => {
+    if (title.startsWith('should pass')) return 'passed';
+    if (title.startsWith('should fail')) return 'failed';
+    throw new Error(
+        `test title must start with "should pass" or "should fail": ${title}`
+    );
+};
+
+const checkTest = (test: TestResult) => {
+    const fullTitle = test.title.join(' > ');
+    const title = test.title[test.title.length - 1];
+
+    expect(test.state, fullTitle).to.equal(expectedState(title));
+    if (test.state === 'passed') return;
+
+    const error = test.displayError ?? '';
+    // config validation throws Error, a failing request AssertionError
+    expect(error, fullTitle).to.match(
+        /^(AssertionError|Error): cypress-fail-on-network-error:/
+    );
+    expect(error, fullTitle).to.not.match(
+        /originated from your application code/
+    );
+    errorChecks[fullTitle]?.(error);
+};
 
 describe('Cypress', () => {
     let server: Server;
+    let runs: RunResult[];
 
-    before(async () => {
+    before(async function () {
+        this.timeout(180000);
         server = await start();
+        const { port } = server.address() as AddressInfo;
+
+        const result = await cypress.run({
+            browser,
+            configFile: 'cypress/cypress.config.ts',
+            config: { e2e: { baseUrl: `http://localhost:${port}` } },
+        });
+        if ('failures' in result) throw new Error(result.message);
+        runs = result.runs;
     });
 
     after((done) => {
         server.close(done);
     });
 
-    it('WHEN request error is called THEN cypress fails', async () => {
-        const spec = ' --spec ./cypress/e2e/shouldFailOnNetworkRequest.cy.ts';
-        let testResult = '';
-
-        try {
-            await exec(cypressRun + spec);
-        } catch (error: any) {
-            testResult = error.stdout;
-        } finally {
-            // console.log(testResult);
-            expect(testResult).to.match(/Passing:.*1/);
-            expect(testResult).to.match(/Failing:.*2/);
-            expect(testResult).to.match(/cypress-fail-on-network-error/);
-        }
+    it('WHEN all specs run in one cypress run THEN expect a result for every spec', () => {
+        expect(
+            runs.map((run) => basename(run.spec.relative)).sort()
+        ).to.deep.equal(specs.sort());
     });
 
-    it('WHEN request error is called but excluded THEN cypress pass', async () => {
-        const spec = ' --spec ./cypress/e2e/shouldPassOnNetworkRequest.cy.ts';
-
-        const { stdout } = await exec(cypressRun + spec);
-        const testResult = stdout;
-
-        // console.log(testResult);
-        expect(testResult).to.match(/Passing:.*2/);
-        expect(testResult).to.match(/Failing:.*0/);
-        expect(testResult).to.not.match(/cypress-fail-on-network-error/);
-    });
-
-    it('WHEN run multiple tests files THEN cypress run all files', async () => {
-        const spec =
-            ' --spec "cypress/e2e/shouldRunAllTestsAlthoughAssertionError.cy.ts,cypress/e2e/shouldRunAllTestsAlthoughAssertionError2.cy.ts"';
-        let testResult = '';
-
-        try {
-            await exec(cypressRun + spec);
-        } catch (error: any) {
-            testResult = error.stdout;
-        } finally {
-            // console.log(testResult);
-            const expectedTestResult = /1 of 2 failed.*2.*1.*1/;
-            expect(testResult).to.match(expectedTestResult);
-        }
-    });
-
-    it('WHEN status range is excluded THEN cypress passes inside and fails outside the range', async () => {
-        const spec = ' --spec ./cypress/e2e/shouldExcludeStatusRange.cy.ts';
-        let testResult = '';
-
-        try {
-            await exec(cypressRun + spec);
-        } catch (error: any) {
-            testResult = stripColors(error.stdout);
-        } finally {
-            expect(testResult).to.match(/Passing:\s+1\s/);
-            expect(testResult).to.match(/Failing:\s+1\s/);
-            expect(testResult).to.match(/cypress-fail-on-network-error/);
-        }
-    });
-
-    it('WHEN request fails without a response THEN cypress fails with the error unless excluded', async () => {
-        const spec = ' --spec ./cypress/e2e/shouldFailOnRequestError.cy.ts';
-        let testResult = '';
-
-        try {
-            await exec(cypressRun + spec);
-        } catch (error: any) {
-            testResult = stripColors(error.stdout);
-        } finally {
-            expect(testResult).to.match(/Passing:\s+1\s/);
-            expect(testResult).to.match(/Failing:\s+1\s/);
-            expect(testResult).to.match(
-                /cypress-fail-on-network-error:\s*\[.*"error":"/
+    for (const spec of specs) {
+        it(`WHEN ${spec} runs THEN expect each test to pass or fail as its title says`, () => {
+            const run = runs.find(
+                (run) => basename(run.spec.relative) === spec
             );
-        }
-    });
-
-    it('WHEN waitForRequests times out with a request still pending THEN cypress continues and passes', async () => {
-        const spec =
-            ' --spec ./cypress/e2e/shouldContinueAfterWaitTimeout.cy.ts';
-
-        const { stdout } = await exec(cypressRun + spec);
-        const testResult = stripColors(stdout);
-
-        expect(testResult).to.match(/Passing:\s+1\s/);
-        expect(testResult).to.match(/Failing:\s+0\s/);
-        expect(testResult).to.not.match(/cypress-fail-on-network-error/);
-    });
-
-    it('WHEN waitForRequests follows cy.visit directly THEN cypress waits for the requests the page made', async () => {
-        const spec = ' --spec ./cypress/e2e/shouldWaitForNewRequests.cy.ts';
-        let testResult = '';
-
-        try {
-            await exec(cypressRun + spec);
-        } catch (error: any) {
-            testResult = stripColors(error.stdout);
-        } finally {
-            expect(testResult).to.match(/Passing:\s+0\s/);
-            expect(testResult).to.match(/Failing:\s+1\s/);
-            expect(testResult).to.match(/cypress-fail-on-network-error/);
-        }
-    });
-
-    it('WHEN config sets a lower-case method or an unknown key THEN cypress matches the method and rejects the key', async () => {
-        const spec =
-            ' --spec ./cypress/e2e/shouldNormalizeAndValidateConfig.cy.ts';
-        let testResult = '';
-
-        try {
-            await exec(cypressRun + spec);
-        } catch (error: any) {
-            testResult = stripColors(error.stdout);
-        } finally {
-            expect(testResult).to.match(/Passing:\s+1\s/);
-            expect(testResult).to.match(/Failing:\s+1\s/);
-            expect(testResult).to.match(
-                /cypress-fail-on-network-error: config\.requests\[0\] has unknown keys/
-            );
-        }
-    });
-
-    it('WHEN the spec ignores uncaught exceptions THEN cypress still fails with the plugin error', async () => {
-        const spec =
-            ' --spec ./cypress/e2e/shouldFailDespiteUncaughtExceptionHandler.cy.ts';
-        let testResult = '';
-
-        try {
-            await exec(cypressRun + spec);
-        } catch (error: any) {
-            testResult = stripColors(error.stdout);
-        } finally {
-            expect(testResult).to.match(/Passing:\s+0\s/);
-            expect(testResult).to.match(/Failing:\s+1\s/);
-            expect(testResult).to.match(
-                /AssertionError: cypress-fail-on-network-error:/
-            );
-            expect(testResult).to.not.match(
-                /originated from your application code/
-            );
-        }
-    });
-
-    it('WHEN getConfig().requests is changed in a test THEN cypress uses the original config in the next test', async () => {
-        const spec = ' --spec ./cypress/e2e/shouldNotLeakConfigChanges.cy.ts';
-        let testResult = '';
-
-        try {
-            await exec(cypressRun + spec);
-        } catch (error: any) {
-            testResult = stripColors(error.stdout);
-        } finally {
-            expect(testResult).to.match(/Passing:\s+1\s/);
-            expect(testResult).to.match(/Failing:\s+1\s/);
-            expect(testResult).to.match(/cypress-fail-on-network-error/);
-        }
-    });
-
-    it('WHEN page loads a script, stylesheet and image THEN cypress reports only the XHR', async () => {
-        const spec = ' --spec ./cypress/e2e/shouldCheckOnlyXhrAndFetch.cy.ts';
-        let testResult = '';
-
-        try {
-            await exec(cypressRun + spec);
-        } catch (error: any) {
-            testResult = stripColors(error.stdout);
-        } finally {
-            expect(testResult).to.match(/Failing:\s+1\s/);
-            expect(testResult).to.match(
-                /cypress-fail-on-network-error:\s*\[.*\/xhr\//
-            );
-            expect(testResult).to.not.match(/resource\.(css|js|svg)/);
-        }
-    });
+            expect(run, spec).to.exist;
+            expect(run!.tests, spec).to.not.be.empty;
+            run!.tests.forEach(checkTest);
+        });
+    }
 });

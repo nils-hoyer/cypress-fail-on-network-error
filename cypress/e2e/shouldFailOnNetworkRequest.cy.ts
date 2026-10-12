@@ -1,25 +1,23 @@
-describe('shouldfailOnNetworkRequest', () => {
-    it('should fail on request mismatch', () => {
-        cy.setConfigRequests([]);
-        cy.visit(
-            'http://localhost:3000/test?method=get&status=200&requests=1&delay=0'
-        );
-        cy.wait(1000);
+describe('shouldFailOnNetworkRequest', () => {
+    beforeEach(() => {
+        cy.visit('/');
     });
 
-    it('should pass on request match', () => {
+    it('should fail on an XHR that matches no entry', () => {
+        cy.setConfigRequests([]);
+        cy.xhr('/xhr?status=200');
+        cy.waitForRequests();
+    });
+
+    it('should pass on an excluded XHR after a failed test', () => {
         cy.setConfigRequests(['/xhr']);
-        cy.visit(
-            'http://localhost:3000/test?method=get&status=200&requests=1&delay=1'
-        );
-        cy.wait(1000);
+        cy.xhr('/xhr?status=200');
+        cy.waitForRequests();
     });
 
-    it('should fail on request mismatch', () => {
+    it('should fail on a fetch that matches no entry after a passed test', () => {
         cy.setConfigRequests([]);
-        cy.visit(
-            'http://localhost:3000/test?method=get&status=200&requests=1&delay=2'
-        );
-        cy.wait(1000);
+        cy.fetch('/xhr?status=200');
+        cy.waitForRequests();
     });
 });

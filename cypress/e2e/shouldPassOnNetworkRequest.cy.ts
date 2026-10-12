@@ -1,14 +1,26 @@
+// excluded by the config in cypress/support/e2e.ts
 describe('shouldPassOnNetworkRequest', () => {
-    it('when request exluded then pass on network request 428', () => {
-        cy.visit(
-            'http://localhost:3000/test?method=get&status=428&requests=1&delay=0'
-        );
-        cy.wait(1000);
+    beforeEach(() => {
+        cy.visit('/');
     });
-    it('when request exluded then pass on network request 428', () => {
-        cy.visit(
-            'http://localhost:3000/test?method=get&status=428&requests=1&delay=0'
-        );
-        cy.wait(1000);
+
+    it('should pass on a URL excluded by a string entry', () => {
+        cy.fetch('/xhr?status=500&excludedUrl');
+        cy.waitForRequests();
+    });
+
+    it('should pass on a request excluded by URL, method and status', () => {
+        cy.xhr('/xhr?status=428');
+        cy.waitForRequests();
+    });
+
+    it('should pass on a status excluded by a status entry', () => {
+        cy.fetch('/xhr?status=430', { method: 'POST' });
+        cy.waitForRequests();
+    });
+
+    it('should pass on a status excluded by a status range', () => {
+        cy.fetch('/xhr?status=201');
+        cy.waitForRequests();
     });
 });
