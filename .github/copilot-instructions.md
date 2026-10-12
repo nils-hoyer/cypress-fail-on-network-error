@@ -40,7 +40,7 @@
 - Name unit tests `WHEN <condition> THEN expect <result>`.
 - Add a unit test for any change to a helper in `src/index.ts`. Add an integration test and fixture spec for any change to runtime behavior inside Cypress.
 - The plugin runs inside the Cypress browser bundle. Keep runtime `dependencies` to `chai` and `type-detect`, and do not use Node-only APIs in `src/`.
-- Config validation uses `chai.expect` with `type-detect` and throws `AssertionError`. Follow the same pattern for new config options.
+- Config validation uses plain checks with `type-detect` (the `expectType` and `invalid` helpers) and throws a plain `Error`, not chai's `AssertionError`: a broken config is not a failed check. The message starts with the `cypress-fail-on-network-error:` prefix, names the entry and key, such as `config.requests[1].status`, and says what it got. Follow the same pattern for new config options, and add them to the known keys, or validation rejects them. Only a request that fails the test throws `AssertionError`.
 - `package.json` declares `peerDependencies.cypress` as `>=8.4.0`, the oldest Cypress the plugin was tested on, and `engines.node` as `>=18`, which `chai` 6 needs. The `exports` map exposes only the package root and `package.json`. Raising either minimum or narrowing `exports` is a breaking change.
 - Keep the public API backward compatible: the default export's signature, the returned `{ getConfig, setConfig, waitForRequests }`, and the `Config`, `Request` and `Range` types. A breaking change needs a major version bump.
 - Keep the `cypress-fail-on-network-error:` prefix on thrown error messages. Integration tests and users match on it.
@@ -52,19 +52,21 @@ Releases are started by hand: run `.github/workflows/release.yml` from the Actio
 
 Do not change `version` in `package.json` in a pull request; the Release workflow does that. Label every pull request with the release type it needs:
 
-| Release | Label             | When                                                                                                                                                 |
-| ------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| major   | `breaking-change` | Removes or renames an export, option or type; changes a default or the type of error thrown; raises the minimum Cypress or Node version.             |
-| minor   | `enhancement`     | Adds an option, export or behavior that existing configs do not notice. Stricter validation that only rejects configs that never worked also counts. |
-| patch   | `bug`             | Makes behavior match the documentation; updates a runtime dependency.                                                                                |
-| none    | `documentation`   | Changes only docs, tests, CI, dev dependencies, or refactors without a change in behavior. Ships with the next release.                              |
+| Release | Label             | When                                                                                                                                                                   |
+| ------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| major   | `breaking-change` | Removes or renames an export, option or type; changes a default or the type of error thrown when a request fails the test; raises the minimum Cypress or Node version. |
+| minor   | `enhancement`     | Adds an option, export or behavior that existing configs do not notice. Stricter validation that only rejects configs that never worked also counts.                   |
+| patch   | `bug`             | Makes behavior match the documentation; updates a runtime dependency.                                                                                                  |
+| none    | `documentation`   | Changes only docs, tests, CI, dev dependencies, or refactors without a change in behavior. Ships with the next release.                                                |
 
 - When running the Release workflow, choose the highest type among the pull requests merged since the last release. For example, while a breaking change sits unreleased on `main`, the next release must be major.
 - Give the pull request a plain, descriptive title, such as "Fix status ranges that never match", without a type prefix. The generated release notes list titles as written, grouped by label (`.github/release.yml`).
 
 ## Behavior to preserve
 
+- Validation rejects unknown keys, entries that set none of `url`, `method` and `status` (an empty `url` counts as unset), entries that are neither a string nor an object, and `url` strings that are not valid regular expressions. It must accept the normalized config from `getConfig()`, because `test:after:run` passes it back to `setConfig()`.
 - A string entry in `requests` is shorthand for `{ url }`. `url` values go through `new RegExp(url).test(requestUrl)`, so they match anywhere in the full URL.
+- Methods match case-insensitively: `mapToRequests` upper-cases the entry's method and `isRequestExcluded` upper-cases the request's, because browsers upper-case only the standard methods.
 - Entries are OR'd: a request is excluded if any entry matches. Fields within one entry are AND'd, and an omitted field matches any value.
 - A numeric `status` is normalized to a `{ from, to }` range with both ends equal, and a reversed range has its ends swapped. A range matches statuses from `from` to `to`, including both ends; a request without a status never matches an entry that sets `status`.
 - After every test (`test:after:run`) the config is reset to the one passed to `failOnNetworkError()`, and tracked requests are cleared. Responses for requests from an earlier test are ignored.

@@ -62,19 +62,25 @@ A `string` entry is shorthand for `{ url: string }`. A `Request` entry can set a
 | Field    | Type                                              | Matches when                                                                                                                                                  |
 | -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `url`    | `string \| RegExp`                                | The pattern matches anywhere in the full request URL. A string is turned into a `RegExp`, so escape characters such as `.` and `?` to match them literally. |
-| `method` | `'GET' \| 'POST' \| 'PUT' \| 'DELETE' \| 'PATCH'` | The request method is exactly this value.                                                                                                                     |
+| `method` | `'GET' \| 'POST' \| 'PUT' \| 'DELETE' \| 'PATCH'` | The request method is this value, ignoring case.                                                                                                              |
 | `status` | `number \| { from: number; to: number }`          | The response status equals the number, or is within the range, including both ends. The ends can be in either order.                                                                          |
 
 A request that fails without a response (for example, when the connection is refused) has no status. Only entries without `status` can exclude it.
 
-An invalid config, such as `status: '404'`, throws an `AssertionError` when you call `failOnNetworkError()` or `setConfig()`.
+An invalid config throws an `Error` when you call `failOnNetworkError()` or `setConfig()`. The message starts with `cypress-fail-on-network-error:` and names the entry and field, for example `config.requests[1].status must be a number or a { from, to } range, got string`. These are invalid:
+
+- a field of the wrong type, such as `status: '404'`;
+- a `url` string that is not a valid regular expression, such as `'('`;
+- an unknown field, such as `stauts`;
+- an entry that sets none of `url`, `method` and `status`, such as `{}`, because it would exclude every request;
+- an entry that is neither a string nor an object. Write a `RegExp` as `{ url: /…/ }`.
 
 ## Change the config inside a test
 
 `failOnNetworkError()` returns `getConfig()` and `setConfig()`. Wrap them in custom commands to change the excluded requests for one test. After each test, the config goes back to the one you passed to `failOnNetworkError()`.
 
 - `setConfig()` replaces the whole config.
-- `getConfig()` returns the normalized config: string entries come back as `Request` objects, and a `status` comes back as a `{ from, to }` range with `from` no greater than `to`.
+- `getConfig()` returns the normalized config: string entries come back as `Request` objects, a `method` comes back in upper case, and a `status` comes back as a `{ from, to }` range with `from` no greater than `to`.
 
 ```ts
 // cypress/support/e2e.ts

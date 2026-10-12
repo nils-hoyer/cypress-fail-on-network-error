@@ -1,6 +1,7 @@
-import * as chai from 'chai';
 import { AssertionError } from 'chai';
 import typeDetect from 'type-detect';
+
+const prefix = 'cypress-fail-on-network-error:';
 
 export type Config = {
     requests?: (string | Request)[];
@@ -92,9 +93,7 @@ export default function failOnNetworkError(_config: Config = {}) {
                 getConfig()
             )
         ) {
-            throw new AssertionError(
-                `cypress-fail-on-network-error:\n${JSON.stringify(requests)}`
-            );
+            throw new AssertionError(`${prefix}\n${JSON.stringify(requests)}`);
         }
     });
 
@@ -110,27 +109,87 @@ export default function failOnNetworkError(_config: Config = {}) {
     };
 }
 
+const requestKeys = ['url', 'method', 'status'];
+
+// a broken config is not a failed check, so it throws an Error, not an AssertionError
+const invalid = (message: string) => new Error(`${prefix} ${message}`);
+
+const expectType = (value: unknown, types: string[], message: string) => {
+    if (types.indexOf(typeDetect(value)) === -1)
+        throw invalid(`${message}, got ${typeDetect(value)}`);
+};
+
 export const validateConfig = (config: Config): void => {
-    // TODO replace any with Request
-    config.requests?.forEach((request: any) => {
-        if (typeDetect(request) === 'string') return;
-        chai.expect(typeDetect(request.url)).to.be.oneOf([
-            'string',
-            'RegExp',
-            'undefined',
-        ]);
-        chai.expect(typeDetect(request.method)).to.be.oneOf([
-            'string',
-            'undefined',
-        ]);
-        chai.expect(typeDetect(request.status)).to.be.oneOf([
-            'Object',
-            'number',
-            'undefined',
-        ]);
+    expectType(config, ['Object'], 'config must be an object');
+    expectType(
+        config.requests,
+        ['Array', 'undefined'],
+        'config.requests must be an array'
+    );
+
+    config.requests?.forEach((_request: unknown, index: number) => {
+        const name = `config.requests[${index}]`;
+        expectType(
+            _request,
+            ['string', 'Object'],
+            `${name} must be a string or an object`
+        );
+
+        // TODO replace any with Request
+        const request: any =
+            typeof _request === 'string' ? { url: _request } : _request;
+
+        const unknownKeys = Object.keys(request).filter(
+            (key) => requestKeys.indexOf(key) === -1
+        );
+        if (unknownKeys.length > 0)
+            throw invalid(
+                `${name} has unknown keys ${unknownKeys.join(', ')}, use url, method or status`
+            );
+        // an empty url is ignored when matching, like an omitted one
+        const setKeys = requestKeys.filter(
+            (key) => request[key] !== undefined && request[key] !== ''
+        );
+        if (setKeys.length === 0)
+            throw invalid(
+                `${name} must set url, method or status, or it excludes every request`
+            );
+
+        expectType(
+            request.url,
+            ['string', 'RegExp', 'undefined'],
+            `${name}.url must be a string or a RegExp`
+        );
+        if (typeof request.url === 'string') {
+            try {
+                new RegExp(request.url);
+            } catch (error) {
+                throw invalid(
+                    `${name}.url is not a valid regular expression: ${(error as Error).message}`
+                );
+            }
+        }
+        expectType(
+            request.method,
+            ['string', 'undefined'],
+            `${name}.method must be a string`
+        );
+        expectType(
+            request.status,
+            ['Object', 'number', 'undefined'],
+            `${name}.status must be a number or a { from, to } range`
+        );
         if (typeDetect(request.status) === 'Object') {
-            chai.expect(typeDetect(request.status.from)).to.equal('number');
-            chai.expect(typeDetect(request.status.to)).to.equal('number');
+            expectType(
+                request.status.from,
+                ['number'],
+                `${name}.status.from must be a number`
+            );
+            expectType(
+                request.status.to,
+                ['number'],
+                `${name}.status.to must be a number`
+            );
         }
     });
 };
@@ -158,7 +217,8 @@ export const mapToRequests = (_unknowns: (string | Request)[]): Request[] =>
 
             return {
                 url: unknown.url,
-                method: unknown.method,
+                // the event reports methods in upper case
+                method: unknown.method?.toUpperCase() as Request['method'],
                 status,
             };
         }
@@ -192,8 +252,9 @@ export const isRequestExcluded = (
               request.status >= configRequest.status.from &&
               request.status <= configRequest.status.to
             : true;
+        // browsers upper-case only the standard methods, so fetch keeps 'patch'
         const methodMatch = configRequest?.method
-            ? configRequest?.method === request.method
+            ? configRequest?.method === request.method.toUpperCase()
             : true;
         return urlMatch && statusMatch && methodMatch;
     });
