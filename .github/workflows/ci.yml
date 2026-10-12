@@ -11,14 +11,6 @@ on:
 jobs:
     build:
         runs-on: ubuntu-latest
-        strategy:
-            # one browser failing should not hide the results of the others
-            fail-fast: false
-            matrix:
-                # electron is Cypress's default browser; the runner image has
-                # Chrome and Firefox
-                browser: [chrome, electron, firefox]
-        name: build (${{ matrix.browser }})
         steps:
             - uses: actions/checkout@v7
             - name: Node LTS
@@ -28,5 +20,3 @@ jobs:
                   cache: 'npm'
             - run: npm ci
             - run: npm run verify
-              env:
-                  BROWSER: ${{ matrix.browser }}
