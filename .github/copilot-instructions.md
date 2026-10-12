@@ -15,6 +15,7 @@
 - `backend/app.cjs` and `backend/index.html`: Express test server on port 3000. `integrationTest.ts` starts it with the exported `start()` before the tests and closes it after them. `node backend/app.cjs` (`npm run build:be`) runs it on its own.
     - `GET /test?method=&status=&requests=&delay=` serves a page that fires `requests` XHRs at `http://127.0.0.1:3000/xhr/?status=&delay=`. All four query parameters are required.
     - `GET /xhr?status=&delay=` responds with `status` after `delay` milliseconds. `status=none` closes the connection without a response instead, which Cypress reports as a `request:error`.
+    - `GET /resources` serves a page that loads a script, a stylesheet and an image from the server, and sends one XHR.
 - `types/`: legacy vendored typings that no tsconfig references. Leave them alone.
 - `README.md`: user documentation. Update it whenever public API or behavior changes.
 

@@ -123,4 +123,21 @@ describe('Cypress', () => {
             expect(testResult).to.match(/cypress-fail-on-network-error/);
         }
     });
+
+    it('WHEN page loads a script, stylesheet and image THEN cypress reports only the XHR', async () => {
+        const spec = ' --spec ./cypress/e2e/shouldCheckOnlyXhrAndFetch.cy.ts';
+        let testResult = '';
+
+        try {
+            await exec(cypressRun + spec);
+        } catch (error: any) {
+            testResult = stripColors(error.stdout);
+        } finally {
+            expect(testResult).to.match(/Failing:\s+1\s/);
+            expect(testResult).to.match(
+                /cypress-fail-on-network-error:\s*\[.*\/xhr\//
+            );
+            expect(testResult).to.not.match(/resource\.(css|js|svg)/);
+        }
+    });
 });

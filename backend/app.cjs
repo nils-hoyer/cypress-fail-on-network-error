@@ -34,6 +34,40 @@ app.get('/xhr', (request, response) => {
     }, delay);
 });
 
+// a page that loads a script, a stylesheet and an image, and makes one XHR
+app.get('/resources', (request, response) => {
+    response.set('Content-Type', 'text/html').send(`<html>
+    <head>
+        <link rel="stylesheet" href="http://127.0.0.1:3000/resource.css" />
+        <script src="http://127.0.0.1:3000/resource.js"></script>
+    </head>
+    <body>
+        <img src="http://127.0.0.1:3000/resource.svg" />
+        <script>
+            const request = new XMLHttpRequest();
+            request.open('GET', 'http://127.0.0.1:3000/xhr/?status=200&delay=0');
+            request.send();
+        </script>
+    </body>
+</html>`);
+});
+
+app.get('/resource.css', (request, response) => {
+    response.set('Content-Type', 'text/css').send('body { margin: 0; }');
+});
+
+app.get('/resource.js', (request, response) => {
+    response
+        .set('Content-Type', 'text/javascript')
+        .send('window.loaded = true;');
+});
+
+app.get('/resource.svg', (request, response) => {
+    response
+        .set('Content-Type', 'image/svg+xml')
+        .send('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
+});
+
 const generateHtml = ({ method, status, requests, delay }) => {
     return fs
         .readFileSync(__dirname + '/index.html')
