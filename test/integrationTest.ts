@@ -62,4 +62,19 @@ describe('Cypress', () => {
             expect(testResult).to.match(expectedTestResult);
         }
     });
+
+    it('WHEN status range is excluded THEN cypress passes inside and fails outside the range', async () => {
+        const spec = ' --spec ./cypress/e2e/shouldExcludeStatusRange.cy.ts';
+        let testResult = '';
+
+        try {
+            await exec(cypressRun + spec);
+        } catch (error: any) {
+            testResult = error.stdout;
+        } finally {
+            expect(testResult).to.match(/Passing:\s+1\s/);
+            expect(testResult).to.match(/Failing:\s+1\s/);
+            expect(testResult).to.match(/cypress-fail-on-network-error/);
+        }
+    });
 });
