@@ -1,4 +1,3 @@
-import * as chai from 'chai';
 import { AssertionError } from 'chai';
 import typeDetect from 'type-detect';
 
@@ -112,71 +111,85 @@ export default function failOnNetworkError(_config: Config = {}) {
 
 const requestKeys = ['url', 'method', 'status'];
 
+// a broken config is not a failed check, so it throws an Error, not an AssertionError
+const invalid = (message: string) => new Error(`${prefix} ${message}`);
+
+const expectType = (value: unknown, types: string[], message: string) => {
+    if (types.indexOf(typeDetect(value)) === -1)
+        throw invalid(`${message}, got ${typeDetect(value)}`);
+};
+
 export const validateConfig = (config: Config): void => {
-    chai.expect(
-        typeDetect(config),
-        `${prefix} config must be an object`
-    ).to.equal('Object');
-    chai.expect(
-        typeDetect(config.requests),
-        `${prefix} config.requests must be an array`
-    ).to.be.oneOf(['Array', 'undefined']);
+    expectType(config, ['Object'], 'config must be an object');
+    expectType(
+        config.requests,
+        ['Array', 'undefined'],
+        'config.requests must be an array'
+    );
 
     config.requests?.forEach((_request: unknown, index: number) => {
         const name = `config.requests[${index}]`;
-        chai.expect(
-            typeDetect(_request),
-            `${prefix} ${name} must be a string or an object`
-        ).to.be.oneOf(['string', 'Object']);
+        expectType(
+            _request,
+            ['string', 'Object'],
+            `${name} must be a string or an object`
+        );
 
         // TODO replace any with Request
         const request: any =
             typeof _request === 'string' ? { url: _request } : _request;
 
-        chai.expect(
-            Object.keys(request).filter(
-                (key) => requestKeys.indexOf(key) === -1
-            ),
-            `${prefix} ${name} has unknown keys, use url, method or status`
-        ).to.be.empty;
+        const unknownKeys = Object.keys(request).filter(
+            (key) => requestKeys.indexOf(key) === -1
+        );
+        if (unknownKeys.length > 0)
+            throw invalid(
+                `${name} has unknown keys ${unknownKeys.join(', ')}, use url, method or status`
+            );
         // an empty url is ignored when matching, like an omitted one
-        chai.expect(
-            requestKeys.filter(
-                (key) => request[key] !== undefined && request[key] !== ''
-            ),
-            `${prefix} ${name} must set url, method or status, or it excludes every request`
-        ).to.not.be.empty;
+        const setKeys = requestKeys.filter(
+            (key) => request[key] !== undefined && request[key] !== ''
+        );
+        if (setKeys.length === 0)
+            throw invalid(
+                `${name} must set url, method or status, or it excludes every request`
+            );
 
-        chai.expect(
-            typeDetect(request.url),
-            `${prefix} ${name}.url must be a string or a RegExp`
-        ).to.be.oneOf(['string', 'RegExp', 'undefined']);
+        expectType(
+            request.url,
+            ['string', 'RegExp', 'undefined'],
+            `${name}.url must be a string or a RegExp`
+        );
         if (typeof request.url === 'string') {
             try {
                 new RegExp(request.url);
             } catch (error) {
-                throw new AssertionError(
-                    `${prefix} ${name}.url is not a valid regular expression: ${(error as Error).message}`
+                throw invalid(
+                    `${name}.url is not a valid regular expression: ${(error as Error).message}`
                 );
             }
         }
-        chai.expect(
-            typeDetect(request.method),
-            `${prefix} ${name}.method must be a string`
-        ).to.be.oneOf(['string', 'undefined']);
-        chai.expect(
-            typeDetect(request.status),
-            `${prefix} ${name}.status must be a number or a { from, to } range`
-        ).to.be.oneOf(['Object', 'number', 'undefined']);
+        expectType(
+            request.method,
+            ['string', 'undefined'],
+            `${name}.method must be a string`
+        );
+        expectType(
+            request.status,
+            ['Object', 'number', 'undefined'],
+            `${name}.status must be a number or a { from, to } range`
+        );
         if (typeDetect(request.status) === 'Object') {
-            chai.expect(
-                typeDetect(request.status.from),
-                `${prefix} ${name}.status.from must be a number`
-            ).to.equal('number');
-            chai.expect(
-                typeDetect(request.status.to),
-                `${prefix} ${name}.status.to must be a number`
-            ).to.equal('number');
+            expectType(
+                request.status.from,
+                ['number'],
+                `${name}.status.from must be a number`
+            );
+            expectType(
+                request.status.to,
+                ['number'],
+                `${name}.status.to must be a number`
+            );
         }
     });
 };

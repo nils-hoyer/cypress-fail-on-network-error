@@ -67,7 +67,7 @@ A `string` entry is shorthand for `{ url: string }`. A `Request` entry can set a
 
 A request that fails without a response (for example, when the connection is refused) has no status. Only entries without `status` can exclude it.
 
-An invalid config throws an `AssertionError` when you call `failOnNetworkError()` or `setConfig()`. The message names the entry and field, for example `config.requests[1].status`. These are invalid:
+An invalid config throws an `Error` when you call `failOnNetworkError()` or `setConfig()`. The message starts with `cypress-fail-on-network-error:` and names the entry and field, for example `config.requests[1].status must be a number or a { from, to } range, got string`. These are invalid:
 
 - a field of the wrong type, such as `status: '404'`;
 - a `url` string that is not a valid regular expression, such as `'('`;
