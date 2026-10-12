@@ -28,7 +28,8 @@ export default function failOnNetworkError(_config: Config = {}) {
     const setConfig = (_config: Config): void => {
         validateConfig(_config);
         config = createConfig(_config);
-        originConfig = originConfig ?? { ...config };
+        // a separate copy, so changes to getConfig() cannot leak into later tests
+        originConfig = originConfig ?? createConfig(config);
     };
 
     const waitForRequests = (timeout = 10000): Cypress.Chainable<any> => {
