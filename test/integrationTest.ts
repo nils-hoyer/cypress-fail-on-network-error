@@ -5,6 +5,8 @@ import * as util from 'util';
 import { start } from '../backend/app.cjs';
 
 const exec = util.promisify(process.exec);
+// Cypress colors its output in CI, which puts escape codes between "Passing:" and the count
+const stripColors = (output: string) => output.replace(/\u001b\[[0-9;]*m/g, '');
 const cypressRun =
     'cypress run --browser chrome --headless --config-file ./cypress/cypress.config.ts';
 
@@ -70,7 +72,7 @@ describe('Cypress', () => {
         try {
             await exec(cypressRun + spec);
         } catch (error: any) {
-            testResult = error.stdout;
+            testResult = stripColors(error.stdout);
         } finally {
             expect(testResult).to.match(/Passing:\s+1\s/);
             expect(testResult).to.match(/Failing:\s+1\s/);
