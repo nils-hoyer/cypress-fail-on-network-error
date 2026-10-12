@@ -40,6 +40,8 @@ const requestError = (requestId: string, message: string) =>
 
 const testAfterRun = () => emit('test:after:run');
 
+const commandEnd = () => emit('command:end');
+
 // a minimal cy command queue: commands run in order when runCommands() is
 // called, and a command fails when it takes longer than its timeout
 type Command = { run: (subject: unknown) => unknown; timeout: number };
@@ -111,34 +113,85 @@ describe('failOnNetworkError()', () => {
 });
 
 describe('request:event handler', () => {
+    // the plugin fails the test from command:end, inside Cypress's command
+    // queue; an error thrown in request:event would be an uncaught exception
+    const expectFailureAtCommandEnd = (fireEvent: () => void) => {
+        chai.expect(fireEvent).to.not.throw();
+        return chai
+            .expect(commandEnd)
+            .to.throw(AssertionError)
+            .with.property('message')
+            .that.match(/^cypress-fail-on-network-error:/);
+    };
+
+    const expectNoFailure = (fireEvent: () => void) => {
+        chai.expect(fireEvent).to.not.throw();
+        chai.expect(commandEnd).to.not.throw();
+    };
+
     it('WHEN response is excluded THEN expect no error', () => {
         failOnNetworkError({ requests: [{ url: 'foo', status: 200 }] });
 
         incomingRequest('1', 'GET', 'http://foo');
 
-        chai.expect(() => responseReceived('1', 200)).to.not.throw();
+        expectNoFailure(() => responseReceived('1', 200));
     });
 
-    it('WHEN response matches no entry THEN expect assertion error with prefix', () => {
+    it('WHEN response matches no entry THEN expect assertion error with prefix at command:end', () => {
         failOnNetworkError({ requests: [{ url: 'foo', status: 200 }] });
 
         incomingRequest('1', 'GET', 'http://foo');
 
-        chai.expect(() => responseReceived('1', 500))
-            .to.throw(AssertionError)
-            .with.property('message')
-            .that.match(/^cypress-fail-on-network-error:/);
+        expectFailureAtCommandEnd(() => responseReceived('1', 500));
     });
 
-    it('WHEN request error matches no entry THEN expect assertion error with prefix', () => {
+    it('WHEN request error matches no entry THEN expect assertion error with prefix at command:end', () => {
         failOnNetworkError({ requests: [{ status: 200 }] });
 
         incomingRequest('1', 'GET', 'http://foo');
 
-        chai.expect(() => requestError('1', 'socket hang up'))
-            .to.throw(AssertionError)
-            .with.property('message')
-            .that.match(/^cypress-fail-on-network-error:/);
+        expectFailureAtCommandEnd(() => requestError('1', 'socket hang up'));
+    });
+
+    it('WHEN request error matches no entry THEN expect error message in assertion error', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+
+        expectFailureAtCommandEnd(() =>
+            requestError('1', 'socket hang up')
+        ).that.contains('socket hang up');
+    });
+
+    it('WHEN failure was thrown at command:end THEN expect the next command:end not to throw it again', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        expectFailureAtCommandEnd(() => responseReceived('1', 500));
+
+        chai.expect(commandEnd).to.not.throw();
+    });
+
+    it('WHEN two responses match no entry before command:end THEN expect one assertion error listing both', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        incomingRequest('2', 'GET', 'http://bar');
+        responseReceived('1', 500);
+
+        expectFailureAtCommandEnd(() => responseReceived('2', 404))
+            .that.contains('http://foo')
+            .and.contains('http://bar');
+    });
+
+    it('WHEN failure is recorded after the last command THEN expect test:after:run to drop it', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 500);
+        testAfterRun();
+
+        chai.expect(commandEnd).to.not.throw();
     });
 
     it('WHEN response belongs to a request from before test:after:run THEN expect it to be ignored', () => {
@@ -147,7 +200,7 @@ describe('request:event handler', () => {
         incomingRequest('1', 'GET', 'http://foo');
         testAfterRun();
 
-        chai.expect(() => responseReceived('1', 500)).to.not.throw();
+        expectNoFailure(() => responseReceived('1', 500));
     });
 
     [{}, { requests: ['foo'] }].forEach((config: Config) => {
@@ -157,9 +210,7 @@ describe('request:event handler', () => {
             incomingRequest('1', 'GET', 'http://foo');
             testAfterRun();
 
-            chai.expect(() =>
-                requestError('1', 'socket hang up')
-            ).to.not.throw();
+            expectNoFailure(() => requestError('1', 'socket hang up'));
         });
     });
 
@@ -170,7 +221,7 @@ describe('request:event handler', () => {
 
                 incomingRequest('1', 'GET', 'http://foo', resourceType);
 
-                chai.expect(() => responseReceived('1', 500)).to.not.throw();
+                expectNoFailure(() => responseReceived('1', 500));
             });
         }
     );
@@ -181,9 +232,7 @@ describe('request:event handler', () => {
 
             incomingRequest('1', 'GET', 'http://foo', resourceType);
 
-            chai.expect(() => responseReceived('1', 500)).to.throw(
-                AssertionError
-            );
+            expectFailureAtCommandEnd(() => responseReceived('1', 500));
         });
     });
 
@@ -192,20 +241,9 @@ describe('request:event handler', () => {
 
         incomingRequest('1', 'GET', 'http://foo');
 
-        chai.expect(() =>
+        expectNoFailure(() =>
             emit('request:event', 'unknown:event', { requestId: '1' })
-        ).to.not.throw();
-    });
-
-    it('WHEN request error matches no entry THEN expect error message in assertion error', () => {
-        failOnNetworkError();
-
-        incomingRequest('1', 'GET', 'http://foo');
-
-        chai.expect(() => requestError('1', 'socket hang up'))
-            .to.throw(AssertionError)
-            .with.property('message')
-            .that.contains('socket hang up');
+        );
     });
 });
 
