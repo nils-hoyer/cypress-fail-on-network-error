@@ -25,6 +25,8 @@ app.get('/xhr', (request, response) => {
         return response.status(400).send('validation failed!');
 
     setTimeout(() => {
+        // status=none closes the connection without a response
+        if (status === 'none') return request.socket.destroy();
         response
             .set('Content-Type', 'application/json')
             .status(parseInt(status))
