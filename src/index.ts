@@ -2,6 +2,8 @@ import * as chai from 'chai';
 import { AssertionError } from 'chai';
 import typeDetect from 'type-detect';
 
+const prefix = 'cypress-fail-on-network-error:';
+
 export type Config = {
     requests?: (string | Request)[];
 };
@@ -92,9 +94,7 @@ export default function failOnNetworkError(_config: Config = {}) {
                 getConfig()
             )
         ) {
-            throw new AssertionError(
-                `cypress-fail-on-network-error:\n${JSON.stringify(requests)}`
-            );
+            throw new AssertionError(`${prefix}\n${JSON.stringify(requests)}`);
         }
     });
 
@@ -110,27 +110,73 @@ export default function failOnNetworkError(_config: Config = {}) {
     };
 }
 
+const requestKeys = ['url', 'method', 'status'];
+
 export const validateConfig = (config: Config): void => {
-    // TODO replace any with Request
-    config.requests?.forEach((request: any) => {
-        if (typeDetect(request) === 'string') return;
-        chai.expect(typeDetect(request.url)).to.be.oneOf([
-            'string',
-            'RegExp',
-            'undefined',
-        ]);
-        chai.expect(typeDetect(request.method)).to.be.oneOf([
-            'string',
-            'undefined',
-        ]);
-        chai.expect(typeDetect(request.status)).to.be.oneOf([
-            'Object',
-            'number',
-            'undefined',
-        ]);
+    chai.expect(
+        typeDetect(config),
+        `${prefix} config must be an object`
+    ).to.equal('Object');
+    chai.expect(
+        typeDetect(config.requests),
+        `${prefix} config.requests must be an array`
+    ).to.be.oneOf(['Array', 'undefined']);
+
+    config.requests?.forEach((_request: unknown, index: number) => {
+        const name = `config.requests[${index}]`;
+        chai.expect(
+            typeDetect(_request),
+            `${prefix} ${name} must be a string or an object`
+        ).to.be.oneOf(['string', 'Object']);
+
+        // TODO replace any with Request
+        const request: any =
+            typeof _request === 'string' ? { url: _request } : _request;
+
+        chai.expect(
+            Object.keys(request).filter(
+                (key) => requestKeys.indexOf(key) === -1
+            ),
+            `${prefix} ${name} has unknown keys, use url, method or status`
+        ).to.be.empty;
+        // an empty url is ignored when matching, like an omitted one
+        chai.expect(
+            requestKeys.filter(
+                (key) => request[key] !== undefined && request[key] !== ''
+            ),
+            `${prefix} ${name} must set url, method or status, or it excludes every request`
+        ).to.not.be.empty;
+
+        chai.expect(
+            typeDetect(request.url),
+            `${prefix} ${name}.url must be a string or a RegExp`
+        ).to.be.oneOf(['string', 'RegExp', 'undefined']);
+        if (typeof request.url === 'string') {
+            try {
+                new RegExp(request.url);
+            } catch (error) {
+                throw new AssertionError(
+                    `${prefix} ${name}.url is not a valid regular expression: ${(error as Error).message}`
+                );
+            }
+        }
+        chai.expect(
+            typeDetect(request.method),
+            `${prefix} ${name}.method must be a string`
+        ).to.be.oneOf(['string', 'undefined']);
+        chai.expect(
+            typeDetect(request.status),
+            `${prefix} ${name}.status must be a number or a { from, to } range`
+        ).to.be.oneOf(['Object', 'number', 'undefined']);
         if (typeDetect(request.status) === 'Object') {
-            chai.expect(typeDetect(request.status.from)).to.equal('number');
-            chai.expect(typeDetect(request.status.to)).to.equal('number');
+            chai.expect(
+                typeDetect(request.status.from),
+                `${prefix} ${name}.status.from must be a number`
+            ).to.equal('number');
+            chai.expect(
+                typeDetect(request.status.to),
+                `${prefix} ${name}.status.to must be a number`
+            ).to.equal('number');
         }
     });
 };
@@ -158,7 +204,8 @@ export const mapToRequests = (_unknowns: (string | Request)[]): Request[] =>
 
             return {
                 url: unknown.url,
-                method: unknown.method,
+                // the event reports methods in upper case
+                method: unknown.method?.toUpperCase() as Request['method'],
                 status,
             };
         }
@@ -192,8 +239,9 @@ export const isRequestExcluded = (
               request.status >= configRequest.status.from &&
               request.status <= configRequest.status.to
             : true;
+        // browsers upper-case only the standard methods, so fetch keeps 'patch'
         const methodMatch = configRequest?.method
-            ? configRequest?.method === request.method
+            ? configRequest?.method === request.method.toUpperCase()
             : true;
         return urlMatch && statusMatch && methodMatch;
     });

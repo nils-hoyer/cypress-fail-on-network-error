@@ -109,6 +109,24 @@ describe('Cypress', () => {
         expect(testResult).to.not.match(/cypress-fail-on-network-error/);
     });
 
+    it('WHEN config sets a lower-case method or an unknown key THEN cypress matches the method and rejects the key', async () => {
+        const spec =
+            ' --spec ./cypress/e2e/shouldNormalizeAndValidateConfig.cy.ts';
+        let testResult = '';
+
+        try {
+            await exec(cypressRun + spec);
+        } catch (error: any) {
+            testResult = stripColors(error.stdout);
+        } finally {
+            expect(testResult).to.match(/Passing:\s+1\s/);
+            expect(testResult).to.match(/Failing:\s+1\s/);
+            expect(testResult).to.match(
+                /cypress-fail-on-network-error: config\.requests\[0\] has unknown keys/
+            );
+        }
+    });
+
     it('WHEN getConfig().requests is changed in a test THEN cypress uses the original config in the next test', async () => {
         const spec = ' --spec ./cypress/e2e/shouldNotLeakConfigChanges.cy.ts';
         let testResult = '';

@@ -40,7 +40,7 @@
 - Name unit tests `WHEN <condition> THEN expect <result>`.
 - Add a unit test for any change to a helper in `src/index.ts`. Add an integration test and fixture spec for any change to runtime behavior inside Cypress.
 - The plugin runs inside the Cypress browser bundle. Keep runtime `dependencies` to `chai` and `type-detect`, and do not use Node-only APIs in `src/`.
-- Config validation uses `chai.expect` with `type-detect` and throws `AssertionError`. Follow the same pattern for new config options.
+- Config validation uses `chai.expect` with `type-detect` and throws `AssertionError`. Pass `chai.expect` a message that starts with the `cypress-fail-on-network-error:` prefix and names the entry and key, such as `config.requests[1].status`. Follow the same pattern for new config options, and add them to the known keys, or validation rejects them.
 - `package.json` declares `peerDependencies.cypress` as `>=8.4.0`, the oldest Cypress the plugin was tested on, and `engines.node` as `>=18`, which `chai` 6 needs. The `exports` map exposes only the package root and `package.json`. Raising either minimum or narrowing `exports` is a breaking change.
 - Keep the public API backward compatible: the default export's signature, the returned `{ getConfig, setConfig, waitForRequests }`, and the `Config`, `Request` and `Range` types. A breaking change needs a major version bump.
 - Keep the `cypress-fail-on-network-error:` prefix on thrown error messages. Integration tests and users match on it.
@@ -64,7 +64,9 @@ Do not change `version` in `package.json` in a pull request; the Release workflo
 
 ## Behavior to preserve
 
+- Validation rejects unknown keys, entries that set none of `url`, `method` and `status` (an empty `url` counts as unset), entries that are neither a string nor an object, and `url` strings that are not valid regular expressions. It must accept the normalized config from `getConfig()`, because `test:after:run` passes it back to `setConfig()`.
 - A string entry in `requests` is shorthand for `{ url }`. `url` values go through `new RegExp(url).test(requestUrl)`, so they match anywhere in the full URL.
+- Methods match case-insensitively: `mapToRequests` upper-cases the entry's method and `isRequestExcluded` upper-cases the request's, because browsers upper-case only the standard methods.
 - Entries are OR'd: a request is excluded if any entry matches. Fields within one entry are AND'd, and an omitted field matches any value.
 - A numeric `status` is normalized to a `{ from, to }` range with both ends equal, and a reversed range has its ends swapped. A range matches statuses from `from` to `to`, including both ends; a request without a status never matches an entry that sets `status`.
 - After every test (`test:after:run`) the config is reset to the one passed to `failOnNetworkError()`, and tracked requests are cleared. Responses for requests from an earlier test are ignored.

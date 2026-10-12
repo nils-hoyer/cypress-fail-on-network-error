@@ -103,6 +103,11 @@ describe('failOnNetworkError()', () => {
     it('WHEN failOnNetworkError is created with no Config THEN expect no error', () => {
         failOnNetworkError();
     });
+    it('WHEN failOnNetworkError is created with null THEN expect assertion error', () => {
+        chai.expect(() =>
+            failOnNetworkError(null as unknown as Config)
+        ).to.throw(AssertionError);
+    });
 });
 
 describe('request:event handler', () => {
@@ -308,6 +313,80 @@ describe('validateConfig()', () => {
 
         chai.expect(() => validateConfig(config)).to.not.throw(AssertionError);
     });
+
+    const expectInvalid = (config: unknown, name: string) =>
+        chai
+            .expect(() => validateConfig(config as Config))
+            .to.throw(AssertionError)
+            .with.property('message')
+            .that.match(/^cypress-fail-on-network-error:/)
+            .and.contains(name);
+
+    [null, 'foo', ['foo']].forEach((config) => {
+        it(`WHEN config is ${JSON.stringify(config)} THEN expect assertion error naming config`, () => {
+            expectInvalid(config, 'config');
+        });
+    });
+
+    ['foo', {}, null].forEach((requests) => {
+        it(`WHEN requests is ${JSON.stringify(requests)} THEN expect assertion error naming config.requests`, () => {
+            expectInvalid({ requests }, 'config.requests');
+        });
+    });
+
+    [42, /foo/, null, ['foo']].forEach((entry) => {
+        it(`WHEN entry is ${String(entry)} THEN expect assertion error naming the entry`, () => {
+            expectInvalid({ requests: ['foo', entry] }, 'config.requests[1]');
+        });
+    });
+
+    [
+        [{}, '{}'],
+        [{ url: undefined }, '{ url: undefined }'],
+        [{ url: '' }, "{ url: '' }"],
+        ['', "''"],
+    ].forEach(([entry, title]) => {
+        it(`WHEN entry ${title} sets none of url, method or status THEN expect assertion error naming the entry`, () => {
+            expectInvalid({ requests: ['foo', entry] }, 'config.requests[1]');
+        });
+    });
+
+    [{ stauts: 404 }, { url: 'foo', stauts: 404 }].forEach((entry) => {
+        it(`WHEN entry ${JSON.stringify(entry)} has an unknown key THEN expect assertion error naming the entry and key`, () => {
+            const config = { requests: ['foo', entry] };
+            expectInvalid(config, 'config.requests[1]');
+            expectInvalid(config, 'stauts');
+        });
+    });
+
+    ['(', { url: '[a-' }].forEach((entry) => {
+        it(`WHEN url ${JSON.stringify(entry)} is not a valid regular expression THEN expect assertion error naming the entry`, () => {
+            expectInvalid({ requests: ['foo', entry] }, 'config.requests[1]');
+        });
+    });
+
+    [
+        { url: 42 },
+        { method: 42 },
+        { status: '400' },
+        { status: { from: 200 } },
+    ].forEach((entry) => {
+        const key = Object.keys(entry)[0];
+        it(`WHEN entry ${JSON.stringify(entry)} has an invalid ${key} THEN expect assertion error naming the entry and key`, () => {
+            expectInvalid(
+                { requests: ['foo', entry] },
+                `config.requests[1].${key}`
+            );
+        });
+    });
+
+    it('WHEN config is normalized by createConfig THEN expect no assertion error', () => {
+        const config = createConfig({
+            requests: ['foo', { method: 'GET' }, { url: /foo/, status: 200 }],
+        });
+
+        chai.expect(() => validateConfig(config)).to.not.throw();
+    });
 });
 
 describe('mapToRequests()', () => {
@@ -330,6 +409,11 @@ describe('mapToRequests()', () => {
                 method: undefined,
             },
         ]);
+    });
+    it('WHEN method is lower case THEN expect it upper-cased', () => {
+        chai.expect(
+            mapToRequests([{ method: 'get' } as unknown as Request])
+        ).to.deep.equal([{ url: undefined, status: undefined, method: 'GET' }]);
     });
     it('WHEN status range is reversed THEN expect from and to swapped', () => {
         chai.expect(
@@ -368,6 +452,17 @@ describe('isRequestExcluded()', () => {
             status: 400,
         };
         chai.expect(isRequestExcluded(request, config)).to.be.false;
+    });
+    it('WHEN request method is lower case THEN expect it to match the upper-case entry', () => {
+        // browsers upper-case only the standard methods, so fetch keeps 'patch'
+        const config = createConfig({ requests: [{ method: 'PATCH' }] });
+        const request: RequestSession = {
+            requestId: '1',
+            method: 'patch',
+            url: 'http://foo',
+            status: 400,
+        };
+        chai.expect(isRequestExcluded(request, config)).to.be.true;
     });
 
     describe('WHEN config has status range 200 to 399', () => {
