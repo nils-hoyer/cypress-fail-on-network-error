@@ -109,6 +109,21 @@ describe('Cypress', () => {
         expect(testResult).to.not.match(/cypress-fail-on-network-error/);
     });
 
+    it('WHEN waitForRequests follows cy.visit directly THEN cypress waits for the requests the page made', async () => {
+        const spec = ' --spec ./cypress/e2e/shouldWaitForNewRequests.cy.ts';
+        let testResult = '';
+
+        try {
+            await exec(cypressRun + spec);
+        } catch (error: any) {
+            testResult = stripColors(error.stdout);
+        } finally {
+            expect(testResult).to.match(/Passing:\s+0\s/);
+            expect(testResult).to.match(/Failing:\s+1\s/);
+            expect(testResult).to.match(/cypress-fail-on-network-error/);
+        }
+    });
+
     it('WHEN getConfig().requests is changed in a test THEN cypress uses the original config in the next test', async () => {
         const spec = ' --spec ./cypress/e2e/shouldNotLeakConfigChanges.cy.ts';
         let testResult = '';

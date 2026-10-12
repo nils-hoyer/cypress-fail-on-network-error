@@ -207,16 +207,39 @@ describe('request:event handler', () => {
 describe('waitForRequests()', function () {
     this.timeout(5000);
 
-    it('WHEN request failed without a response THEN expect it to resolve before the timeout', async () => {
+    it('WHEN request failed without a response THEN expect it to resolve at the first check', async () => {
         const { waitForRequests } = failOnNetworkError({ requests: ['foo'] });
 
         incomingRequest('1', 'GET', 'http://foo');
         requestError('1', 'socket hang up');
-        waitForRequests(1000);
+        waitForRequests(2000);
 
         const start = Date.now();
         await runCommands();
-        chai.expect(Date.now() - start).to.be.lessThan(500);
+        chai.expect(Date.now() - start).to.be.within(500, 700);
+    });
+
+    it('WHEN no request was made THEN expect it to resolve at the first check', async () => {
+        const { waitForRequests } = failOnNetworkError({ requests: ['foo'] });
+
+        waitForRequests(2000);
+
+        const start = Date.now();
+        await runCommands();
+        chai.expect(Date.now() - start).to.be.within(500, 700);
+    });
+
+    it('WHEN request arrives just after the command starts THEN expect it to wait for that request', async () => {
+        const { waitForRequests } = failOnNetworkError({ requests: ['foo'] });
+
+        waitForRequests(3000);
+        // the plugin learns about a request a few ms after cy.visit resolves
+        setTimeout(() => incomingRequest('1', 'GET', 'http://foo'), 20);
+        setTimeout(() => responseReceived('1', 200), 800);
+
+        const start = Date.now();
+        await runCommands();
+        chai.expect(Date.now() - start).to.be.within(800, 1200);
     });
 
     it('WHEN request is still pending at the timeout THEN expect it to resolve without failing', async () => {
