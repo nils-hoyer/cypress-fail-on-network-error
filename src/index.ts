@@ -134,16 +134,14 @@ export const createConfig = (config: Config): Required<Config> => {
 export const mapToRequests = (_unknowns: (string | Request)[]): Request[] =>
     _unknowns.map((unknown: string | Request) => {
         if (typeof unknown !== 'string') {
-            let status = undefined;
+            let status: Range | undefined = undefined;
 
-            if (unknown.status !== undefined) {
-                status =
-                    typeDetect(unknown.status) === 'number'
-                        ? { from: unknown.status, to: unknown.status }
-                        : {
-                              from: (unknown.status as any).from,
-                              to: (unknown.status as any).to,
-                          };
+            if (typeof unknown.status === 'number') {
+                status = { from: unknown.status, to: unknown.status };
+            } else if (unknown.status !== undefined) {
+                // a reversed range matches the same statuses as the ordered one
+                const { from, to } = unknown.status;
+                status = { from: Math.min(from, to), to: Math.max(from, to) };
             }
 
             return {
@@ -178,8 +176,9 @@ export const isRequestExcluded = (
             ? new RegExp(configRequest.url).test(request.url)
             : true;
         const statusMatch = configRequest.status
-            ? configRequest.status.from >= (request.status as number) &&
-              configRequest.status.to <= (request.status as number)
+            ? request.status !== undefined &&
+              request.status >= configRequest.status.from &&
+              request.status <= configRequest.status.to
             : true;
         const methodMatch = configRequest?.method
             ? configRequest?.method === request.method

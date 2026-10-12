@@ -43,7 +43,7 @@
 - `package.json` declares `peerDependencies.cypress` as `>=8.4.0`, the oldest Cypress the plugin was tested on, and `engines.node` as `>=18`, which `chai` 6 needs. The `exports` map exposes only the package root and `package.json`. Raising either minimum or narrowing `exports` is a breaking change.
 - Keep the public API backward compatible: the default export's signature, the returned `{ getConfig, setConfig, waitForRequests }`, and the `Config`, `Request` and `Range` types. A breaking change needs a major version bump.
 - Keep the `cypress-fail-on-network-error:` prefix on thrown error messages. Integration tests and users match on it.
-- Dependabot handles dependency updates (`.github/dependabot.yml`): monthly for npm and GitHub Actions, with npm minor and patch updates grouped into one pull request. `.github/workflows/dependabot-auto-merge.yml` waits for CI on minor and patch updates and squash-merges them when it passes; major updates wait for review. `main` has no required checks (the Release workflow pushes to it), so the workflow waits for CI itself instead of using `gh pr merge --auto`. Dependency updates ship with the next release. Do not bump dependencies unless the task asks for it.
+- Dependabot handles dependency updates (`.github/dependabot.yml`): monthly for npm and GitHub Actions, with npm minor and patch updates grouped into one pull request. `.github/workflows/dependabot-automerge.yml` waits for CI on minor and patch updates and squash-merges them when it passes; major updates wait for review. `main` has no required checks (the Release workflow pushes to it), so the workflow waits for CI itself instead of using `gh pr merge --auto`. Dependency updates ship with the next release. Do not bump dependencies unless the task asks for it.
 
 ## Releases
 
@@ -65,6 +65,6 @@ Do not change `version` in `package.json` in a pull request; the Release workflo
 
 - A string entry in `requests` is shorthand for `{ url }`. `url` values go through `new RegExp(url).test(requestUrl)`, so they match anywhere in the full URL.
 - Entries are OR'd: a request is excluded if any entry matches. Fields within one entry are AND'd, and an omitted field matches any value.
-- A numeric `status` is normalized to a `{ from, to }` range with both ends equal.
+- A numeric `status` is normalized to a `{ from, to }` range with both ends equal, and a reversed range has its ends swapped. A range matches statuses from `from` to `to`, including both ends; a request without a status never matches an entry that sets `status`.
 - After every test (`test:after:run`) the config is reset to the one passed to `failOnNetworkError()`, and tracked requests are cleared. Responses for requests from an earlier test are ignored.
 - `waitForRequests(timeout = 10000)` polls every 500 ms until every tracked request has a status, and resolves without failing when the timeout passes.

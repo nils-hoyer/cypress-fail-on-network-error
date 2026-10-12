@@ -8,7 +8,7 @@ Fail a Cypress test when your app makes a network request you did not expect, su
 
 The plugin watches the XHR and `fetch` requests Cypress reports while a test runs. When a request gets a response, or fails without one, the plugin compares it with the `requests` list in your config. If no entry matches, the test fails with an `AssertionError`.
 
-> **Note:** every request is checked, whatever its status. A `200` response fails the test too unless you exclude it, for example with `{ status: 200 }`.
+> **Note:** every request is checked, whatever its status. A `200` response fails the test too unless you exclude it. To fail only on error responses, exclude the success range with `{ status: { from: 200, to: 399 } }`.
 
 To fail tests on `console.error()` calls instead, see [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
 
@@ -30,7 +30,7 @@ import failOnNetworkError, { Config } from 'cypress-fail-on-network-error';
 const config: Config = {
     requests: [
         // Don't fail on successful responses
-        { status: 200 },
+        { status: { from: 200, to: 399 } },
         // Ignore every request whose URL contains "analytics"
         'analytics',
         // Allow a 404 from one endpoint
@@ -63,7 +63,7 @@ A `string` entry is shorthand for `{ url: string }`. A `Request` entry can set a
 | -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `url`    | `string \| RegExp`                                | The pattern matches anywhere in the full request URL. A string is turned into a `RegExp`, so escape characters such as `.` and `?` to match them literally. |
 | `method` | `'GET' \| 'POST' \| 'PUT' \| 'DELETE' \| 'PATCH'` | The request method is exactly this value.                                                                                                                     |
-| `status` | `number \| { from: number; to: number }`          | The response status equals the number, or is within the range, including both ends.                                                                          |
+| `status` | `number \| { from: number; to: number }`          | The response status equals the number, or is within the range, including both ends. The ends can be in either order.                                                                          |
 
 A request that fails without a response (for example, when the connection is refused) has no status. Only entries without `status` can exclude it.
 
@@ -74,7 +74,7 @@ An invalid config, such as `status: '404'`, throws an `AssertionError` when you 
 `failOnNetworkError()` returns `getConfig()` and `setConfig()`. Wrap them in custom commands to change the excluded requests for one test. After each test, the config goes back to the one you passed to `failOnNetworkError()`.
 
 - `setConfig()` replaces the whole config.
-- `getConfig()` returns the normalized config: string entries come back as `Request` objects, and a numeric `status` comes back as a `{ from, to }` range.
+- `getConfig()` returns the normalized config: string entries come back as `Request` objects, and a `status` comes back as a `{ from, to }` range with `from` no greater than `to`.
 
 ```ts
 // cypress/support/e2e.ts
@@ -84,7 +84,7 @@ import failOnNetworkError, {
 } from 'cypress-fail-on-network-error';
 
 const config: Config = {
-    requests: [{ status: 200 }],
+    requests: [{ status: { from: 200, to: 399 } }],
 };
 
 const { getConfig, setConfig } = failOnNetworkError(config);
@@ -111,7 +111,7 @@ Because `setConfigRequests` replaces the list, include the entries you still nee
 ```ts
 it('tolerates an unavailable recommendations service', () => {
     cy.setConfigRequests([
-        { status: 200 },
+        { status: { from: 200, to: 399 } },
         { url: /\/api\/recommendations/, status: 503 },
     ]);
     cy.visit('/');

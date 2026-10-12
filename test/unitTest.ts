@@ -76,6 +76,17 @@ describe('mapToRequests()', () => {
             },
         ]);
     });
+    it('WHEN status range is reversed THEN expect from and to swapped', () => {
+        chai.expect(
+            mapToRequests([{ status: { from: 399, to: 200 } }])
+        ).to.deep.equal([
+            {
+                url: undefined,
+                status: { from: 200, to: 399 },
+                method: undefined,
+            },
+        ]);
+    });
 });
 
 describe('isRequestExcluded()', () => {
@@ -102,5 +113,51 @@ describe('isRequestExcluded()', () => {
             status: 400,
         };
         chai.expect(isRequestExcluded(request, config)).to.be.false;
+    });
+
+    describe('WHEN config has status range 200 to 399', () => {
+        const config: Required<Config> = createConfig({
+            requests: [{ status: { from: 200, to: 399 } }],
+        });
+        const requestWithStatus = (status?: number): RequestSession => ({
+            requestId: '1',
+            method: 'GET',
+            url: 'http://foo',
+            status,
+        });
+
+        [200, 302, 399].forEach((status) => {
+            it(`WHEN status is ${status} THEN expect true`, () => {
+                chai.expect(
+                    isRequestExcluded(requestWithStatus(status), config)
+                ).to.be.true;
+            });
+        });
+
+        [199, 400].forEach((status) => {
+            it(`WHEN status is ${status} THEN expect false`, () => {
+                chai.expect(
+                    isRequestExcluded(requestWithStatus(status), config)
+                ).to.be.false;
+            });
+        });
+
+        it('WHEN request has no status THEN expect false', () => {
+            chai.expect(isRequestExcluded(requestWithStatus(), config)).to.be
+                .false;
+        });
+    });
+
+    it('WHEN status range is reversed THEN expect statuses inside it to be excluded', () => {
+        const config: Required<Config> = createConfig({
+            requests: [{ status: { from: 399, to: 200 } }],
+        });
+        const request: RequestSession = {
+            requestId: '1',
+            method: 'GET',
+            url: 'http://foo',
+            status: 302,
+        };
+        chai.expect(isRequestExcluded(request, config)).to.be.true;
     });
 });

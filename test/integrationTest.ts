@@ -5,6 +5,8 @@ import * as util from 'util';
 import { start } from '../backend/app.cjs';
 
 const exec = util.promisify(process.exec);
+// Cypress colors its output in CI, which puts escape codes between "Passing:" and the count
+const stripColors = (output: string) => output.replace(/\u001b\[[0-9;]*m/g, '');
 const cypressRun =
     'cypress run --browser chrome --headless --config-file ./cypress/cypress.config.ts';
 
@@ -60,6 +62,21 @@ describe('Cypress', () => {
             // console.log(testResult);
             const expectedTestResult = /1 of 2 failed.*2.*1.*1/;
             expect(testResult).to.match(expectedTestResult);
+        }
+    });
+
+    it('WHEN status range is excluded THEN cypress passes inside and fails outside the range', async () => {
+        const spec = ' --spec ./cypress/e2e/shouldExcludeStatusRange.cy.ts';
+        let testResult = '';
+
+        try {
+            await exec(cypressRun + spec);
+        } catch (error: any) {
+            testResult = stripColors(error.stdout);
+        } finally {
+            expect(testResult).to.match(/Passing:\s+1\s/);
+            expect(testResult).to.match(/Failing:\s+1\s/);
+            expect(testResult).to.match(/cypress-fail-on-network-error/);
         }
     });
 });

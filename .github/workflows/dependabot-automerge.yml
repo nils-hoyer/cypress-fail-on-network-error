@@ -7,7 +7,7 @@ on: pull_request_target
 
 # a newer push to the pull request replaces the waiting job
 concurrency:
-    group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+    group: dependabot-automerge-${{ github.event.pull_request.number }}
     cancel-in-progress: true
 
 permissions: {}
