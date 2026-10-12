@@ -200,6 +200,7 @@ export const isRequestExcluded = (
 };
 
 const waitUntil = (predicate: () => boolean, timeout: number) => {
+    const interval = 500;
     const endTime = new Date().getTime() + timeout;
 
     const poll = (resolve: () => void) => {
@@ -207,10 +208,14 @@ const waitUntil = (predicate: () => boolean, timeout: number) => {
         if (predicate() || remaining <= 0) {
             resolve();
         } else {
-            setTimeout(() => poll(resolve), Math.min(500, remaining));
+            setTimeout(() => poll(resolve), Math.min(interval, remaining));
         }
     };
-    return new Cypress.Promise<void>(poll);
+    // the plugin learns about a request a few ms after the page made it, so a
+    // check right after cy.visit could miss it: check first after one interval
+    return new Cypress.Promise<void>((resolve) =>
+        setTimeout(() => poll(resolve), Math.min(interval, timeout))
+    );
 };
 
 export type RequestSession = {

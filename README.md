@@ -122,7 +122,7 @@ The repository's [support file](https://github.com/nils-hoyer/cypress-fail-on-ne
 
 ## Wait for pending requests
 
-A response that arrives after a test has ended is not checked, so an error from a slow request can go unnoticed. `waitForRequests(timeout = 10000)` waits until every request seen in the current test has a response or has failed, checking every 500 ms. If the timeout passes first, the test continues without an error.
+A response that arrives after a test has ended is not checked, so an error from a slow request can go unnoticed. `waitForRequests(timeout = 10000)` waits until every request seen in the current test has a response or has failed. It checks every 500 ms, and the first check comes 500 ms after the command starts, so requests the page made just before (for example during `cy.visit`) are seen. If the timeout passes first, the test continues without an error.
 
 Take `waitForRequests` from the same `failOnNetworkError()` call as the other functions. Calling `failOnNetworkError()` more than once registers duplicate listeners.
 
