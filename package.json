@@ -36,6 +36,7 @@
     "type": "git",
     "url": "https://github.com/nils-hoyer/cypress-fail-on-network-error.git"
   },
+  "funding": "https://github.com/sponsors/nils-hoyer",
   "keywords": [
     "cypress",
     "testing",
