@@ -1,4 +1,8 @@
-import failOnNetworkError, { Config, Request } from '../../dist/index';
+import failOnNetworkError, {
+    Config,
+    NormalizedRequest,
+    Request,
+} from '../../dist/index';
 import './commands';
 
 const config: Config = {
@@ -39,7 +43,7 @@ Cypress.Commands.addAll({
 declare global {
     namespace Cypress {
         interface Chainable {
-            getConfigRequests(): Chainable<any>;
+            getConfigRequests(): Chainable<NormalizedRequest[]>;
             setConfigRequests(requests: (string | Request)[]): Chainable<void>;
             waitForRequests(timeout?: number): Chainable<void>;
             fetch(url: string, init?: RequestInit): Chainable<void>;

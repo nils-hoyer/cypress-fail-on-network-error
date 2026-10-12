@@ -18,16 +18,28 @@ export type Range = {
     to: number;
 };
 
+// an entry as getConfig() returns it: a string is { url }, a status a range
+// and the method upper case
+export type NormalizedRequest = {
+    url?: string | RegExp;
+    method?: Request['method'];
+    status?: Range;
+};
+
+export type NormalizedConfig = {
+    requests: NormalizedRequest[];
+};
+
 export default function failOnNetworkError(_config: Config = {}) {
-    let config: Required<Config>;
-    let originConfig: Required<Config>;
+    let config: NormalizedConfig;
+    let originConfig: NormalizedConfig;
     let requests: RequestSession[] = [];
     // set when a request matched no entry, until the next command:end throws
     let requestFailed = false;
 
     const getRequests = () => requests;
 
-    const getConfig = () => config;
+    const getConfig = (): NormalizedConfig => config;
     const setConfig = (_config: Config): void => {
         validateConfig(_config);
         config = createConfig(_config);
@@ -108,8 +120,8 @@ export default function failOnNetworkError(_config: Config = {}) {
         throw new AssertionError(`${prefix}\n${JSON.stringify(requests)}`);
     });
 
-    Cypress.on('test:after:run', async () => {
-        setConfig(originConfig as Config);
+    Cypress.on('test:after:run', () => {
+        setConfig(originConfig);
         requests = [];
         requestFailed = false;
     });
@@ -147,9 +159,9 @@ export const validateConfig = (config: Config): void => {
             `${name} must be a string or an object`
         );
 
-        // TODO replace any with Request
-        const request: any =
-            typeof _request === 'string' ? { url: _request } : _request;
+        const request = (
+            typeof _request === 'string' ? { url: _request } : _request
+        ) as Record<string, unknown>;
 
         const unknownKeys = Object.keys(request).filter(
             (key) => requestKeys.indexOf(key) === -1
@@ -192,13 +204,14 @@ export const validateConfig = (config: Config): void => {
             `${name}.status must be a number or a { from, to } range`
         );
         if (typeDetect(request.status) === 'Object') {
+            const status = request.status as Record<string, unknown>;
             expectType(
-                request.status.from,
+                status.from,
                 ['number'],
                 `${name}.status.from must be a number`
             );
             expectType(
-                request.status.to,
+                status.to,
                 ['number'],
                 `${name}.status.to must be a number`
             );
@@ -206,15 +219,16 @@ export const validateConfig = (config: Config): void => {
     });
 };
 
-//TODO: use Request[] instead of any
-export const createConfig = (config: Config): Required<Config> => {
+export const createConfig = (config: Config): NormalizedConfig => {
     return {
         requests:
             config.requests !== undefined ? mapToRequests(config.requests) : [],
     };
 };
 
-export const mapToRequests = (_unknowns: (string | Request)[]): Request[] =>
+export const mapToRequests = (
+    _unknowns: (string | Request)[]
+): NormalizedRequest[] =>
     _unknowns.map((unknown: string | Request) => {
         if (typeof unknown !== 'string') {
             let status: Range | undefined = undefined;
@@ -252,10 +266,9 @@ export const findRequest = (
 
 export const isRequestExcluded = (
     request: RequestSession,
-    config: Required<Config>
+    config: NormalizedConfig
 ): boolean => {
-    //TODO: replace any with Request
-    return config.requests?.some((configRequest: any) => {
+    return config.requests.some((configRequest: NormalizedRequest) => {
         const urlMatch = configRequest.url
             ? new RegExp(configRequest.url).test(request.url)
             : true;
@@ -265,8 +278,8 @@ export const isRequestExcluded = (
               request.status <= configRequest.status.to
             : true;
         // browsers upper-case only the standard methods, so fetch keeps 'patch'
-        const methodMatch = configRequest?.method
-            ? configRequest?.method === request.method.toUpperCase()
+        const methodMatch = configRequest.method
+            ? configRequest.method === request.method.toUpperCase()
             : true;
         return urlMatch && statusMatch && methodMatch;
     });
