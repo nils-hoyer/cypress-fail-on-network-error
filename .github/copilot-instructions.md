@@ -8,7 +8,7 @@
 
 - `src/index.ts`: the whole plugin. Default export `failOnNetworkError`, the types `Config`, `Request`, `Range` and `RequestSession`, and helper functions (`validateConfig`, `createConfig`, `mapToRequests`, `findRequest`, `isRequestExcluded`) that are exported so the unit tests can reach them.
 - `dist/`: compiled output, ignored by git. npm publishes it (`files` in `package.json`), and the `prepack` script rebuilds it before every `npm pack` and `npm publish`. Never edit it by hand, and do not commit it.
-- `test/unitTest.ts`: mocha unit tests for the helpers. They import from `../dist/index.js` and stub `global.Cypress`.
+- `test/unitTest.ts`: mocha unit tests for the helpers and the event listeners. They import from `../dist/index.js` and stub the `Cypress` and `cy` globals before each test. The `Cypress.on` stub stores each listener by event name, and helpers such as `incomingRequest`, `responseReceived`, `requestError` and `testAfterRun` fire those events.
 - `test/integrationTest.ts`: runs `cypress run --browser chrome --headless` on specs in `cypress/e2e/` and asserts on the stdout summary (passing/failing counts and the `cypress-fail-on-network-error` error text).
 - `cypress/e2e/*.cy.ts`: fixture specs driven by the integration test. Several fail on purpose. Do not "fix" a failing spec; the integration test depends on the exact pass/fail counts. `shouldResetConfigBetweenTests.cy.ts` and `shouldWaitForRequests.cy.ts` are not run by `integrationTest.ts`.
 - `cypress/support/e2e.ts`: registers the plugin from `../../dist/index` and defines the `getConfigRequests`, `setConfigRequests` and `waitForRequests` custom commands used by the specs.
