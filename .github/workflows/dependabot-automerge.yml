@@ -1,0 +1,47 @@
+name: Dependabot auto-merge
+
+# Merges Dependabot's minor and patch updates once CI passes. main has no required
+# checks, because the Release workflow pushes to it, so `gh pr merge --auto` would
+# merge at once. This job waits for CI itself instead.
+on: pull_request_target
+
+# a newer push to the pull request replaces the waiting job
+concurrency:
+    group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+    cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+    auto-merge:
+        runs-on: ubuntu-latest
+        if: github.event.pull_request.user.login == 'dependabot[bot]'
+        permissions:
+            actions: read
+            contents: write
+            pull-requests: write
+        steps:
+            - name: Dependabot metadata
+              id: metadata
+              uses: dependabot/fetch-metadata@v3
+            - name: Wait for CI, then merge minor and patch updates
+              if: steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  GH_REPO: ${{ github.repository }}
+                  PR_URL: ${{ github.event.pull_request.html_url }}
+                  SHA: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  # CI may not have started yet
+                  for attempt in $(seq 30); do
+                      run=$(gh run list --workflow ci.yml --commit "$SHA" --event pull_request --json databaseId --jq '.[0].databaseId')
+                      [ -n "$run" ] && break
+                      sleep 10
+                  done
+                  if [ -z "$run" ]; then
+                      echo "No CI run found for $SHA."
+                      exit 1
+                  fi
+                  gh run watch "$run" --exit-status --interval 30
+                  # merges only the commit that CI tested
+                  gh pr merge "$PR_URL" --squash --match-head-commit "$SHA"

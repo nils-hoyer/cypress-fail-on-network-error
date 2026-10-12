@@ -6,10 +6,6 @@ const port = 3000;
 
 app.use(cors());
 
-app.listen(port, () => {
-    console.log(`app listening on port ${port}`);
-});
-
 app.get('/', (request, response) => {
     response.send('up');
 });
@@ -45,3 +41,16 @@ const generateHtml = ({ method, status, requests, delay }) => {
         .replaceAll('_requests_', requests)
         .replaceAll('_delay_', delay);
 };
+
+const start = () =>
+    new Promise((resolve, reject) => {
+        const server = app.listen(port, (error) => {
+            if (error) return reject(error);
+            console.log(`app listening on port ${port}`);
+            resolve(server);
+        });
+    });
+
+if (require.main === module) start();
+
+module.exports = { start };

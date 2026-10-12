@@ -1,12 +1,24 @@
 import { expect } from 'chai';
 import * as process from 'child_process';
+import type { Server } from 'http';
 import * as util from 'util';
+import { start } from '../backend/app.cjs';
 
 const exec = util.promisify(process.exec);
 const cypressRun =
     'cypress run --browser chrome --headless --config-file ./cypress/cypress.config.ts';
 
 describe('Cypress', () => {
+    let server: Server;
+
+    before(async () => {
+        server = await start();
+    });
+
+    after((done) => {
+        server.close(done);
+    });
+
     it('WHEN request error is called THEN cypress fails', async () => {
         const spec = ' --spec ./cypress/e2e/shouldFailOnNetworkRequest.cy.ts';
         let testResult = '';
