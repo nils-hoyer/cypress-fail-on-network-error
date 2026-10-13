@@ -112,7 +112,7 @@ it('should check every request the page makes', () => {
 ## Contributing
 
 1. Open an issue that describes the problem and the expected behavior.
-2. Install dependencies with `npm ci`. The integration tests run Cypress in Electron, which comes with Cypress. `BROWSER=chrome` or `BROWSER=firefox` runs them in another installed browser.
+2. Use Node.js 22.18 or later, which runs the TypeScript tests without a build step, and install dependencies with `npm ci`. The integration tests run Cypress in Electron, which comes with Cypress. `BROWSER=chrome` or `BROWSER=firefox` runs them in another installed browser.
 3. Make your change in `src/index.ts` and run `npm run build`. The tests run against `dist/`, which is not committed.
 4. Run `npm run verify` (build, type check, format check, unit and integration tests). It must pass.
 5. Open a PR with the implementation and tests. Don't change the version in `package.json`: the maintainer releases from GitHub Actions, which increases the version.

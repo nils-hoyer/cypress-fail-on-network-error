@@ -3,8 +3,6 @@
     "configurations": [
         {
             "args": [
-                "-n",
-                "loader=ts-node/esm",
                 "${workspaceFolder}/test/unitTest.ts",
                 "--timeout",
                 "60000",
@@ -19,8 +17,6 @@
         },
         {
             "args": [
-                "-n",
-                "loader=ts-node/esm",
                 "${workspaceFolder}/test/integrationTest.ts",
                 "--timeout",
                 "60000",
