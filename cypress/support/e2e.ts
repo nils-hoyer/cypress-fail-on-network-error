@@ -1,5 +1,4 @@
 import failOnNetworkError, { Config, Request } from '../../dist/index';
-import './commands';
 
 const config: Config = {
     requests: [
