@@ -20,7 +20,7 @@
 
 ## Build and test
 
-- Use Node.js LTS (CI uses `lts/*`). Integration tests run in Electron, which ships with Cypress; `BROWSER=chrome` or `BROWSER=firefox` runs them in another installed browser. CI runs Electron only: it is Cypress's default browser and changes only with Cypress, so a Cypress update that breaks it fails CI.
+- Use Node.js LTS (CI uses `lts/*`). Mocha loads the `.ts` test files through Node's built-in type stripping, without `ts-node`, so `devEngines` in `package.json` sets the oldest Node that strips types by default, and `npm ci` fails on an older one. `devEngines` applies only to work on this repository; `engines` is what users need. `test/tsconfig.json` sets `erasableSyntaxOnly` and `verbatimModuleSyntax`, so `npm run lint` rejects syntax Node cannot strip (such as `enum`) and imports used only as types without `import type`. Integration tests run in Electron, which ships with Cypress; `BROWSER=chrome` or `BROWSER=firefox` runs them in another installed browser. CI runs Electron only: it is Cypress's default browser and changes only with Cypress, so a Cypress update that breaks it fails CI.
 - `npm ci` installs dependencies.
 - `npm run verify` is what CI runs, and it must pass before a PR is merged. It runs, in order:
     1. `build`: compiles `src/` to `dist/`.

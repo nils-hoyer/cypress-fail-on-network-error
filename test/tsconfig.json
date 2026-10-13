@@ -2,7 +2,11 @@
     "extends": "../tsconfig.json",
     "compilerOptions": {
         "rootDir": "..",
-        "noEmit": true
+        "noEmit": true,
+        // Node runs the tests by stripping types, which needs syntax it can
+        // erase and type-only imports marked as such
+        "erasableSyntaxOnly": true,
+        "verbatimModuleSyntax": true
     },
     "include": ["*"]
 }
