@@ -3,7 +3,6 @@ import failOnNetworkError, {
     NormalizedRequest,
     Request,
 } from '../../dist/index';
-import './commands';
 
 const config: Config = {
     requests: [

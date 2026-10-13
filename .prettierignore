@@ -2,7 +2,6 @@ cypress/screenshots/
 cypress/videos/
 dist/
 node_modules/
-types/
 package*
 .DS_Store
 .gitignore

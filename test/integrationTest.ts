@@ -73,7 +73,6 @@ describe('Cypress', () => {
 
         const result = await cypress.run({
             browser,
-            configFile: 'cypress/cypress.config.ts',
             config: { e2e: { baseUrl: `http://localhost:${port}` } },
         });
         if ('failures' in result) throw new Error(result.message);
