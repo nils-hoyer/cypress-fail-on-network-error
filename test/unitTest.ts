@@ -38,6 +38,15 @@ const requestError = (requestId: string, message: string) =>
         error: { message },
     });
 
+// the message Chrome reports when the page aborts a request or navigates away
+const requestCancelled = (requestId: string) =>
+    requestError(
+        requestId,
+        `CDP Fetch request canceled by the browser: root:${requestId}`
+    );
+
+const windowUnload = () => emit('window:unload');
+
 const testAfterRun = () => emit('test:after:run');
 
 const commandEnd = () => emit('command:end');
@@ -163,6 +172,36 @@ describe('request:event handler', () => {
         ).that.contains('socket hang up');
     });
 
+    it('WHEN request is cancelled by the browser THEN expect no error', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+
+        expectNoFailure(() => requestCancelled('1'));
+    });
+
+    it('WHEN request error only mentions a cancellation THEN expect assertion error', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+
+        expectFailureAtCommandEnd(() =>
+            requestError(
+                '1',
+                'proxy error: CDP Fetch request canceled by the browser'
+            )
+        );
+    });
+
+    it('WHEN page unloads with a request pending THEN expect a later response to be checked', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        windowUnload();
+
+        expectFailureAtCommandEnd(() => responseReceived('1', 500));
+    });
+
     it('WHEN failure was thrown at command:end THEN expect the next command:end not to throw it again', () => {
         failOnNetworkError();
 
@@ -255,6 +294,30 @@ describe('waitForRequests()', function () {
 
         incomingRequest('1', 'GET', 'http://foo');
         requestError('1', 'socket hang up');
+        waitForRequests(2000);
+
+        const start = Date.now();
+        await runCommands();
+        chai.expect(Date.now() - start).to.be.within(500, 700);
+    });
+
+    it('WHEN request was cancelled by the browser THEN expect it to resolve at the first check', async () => {
+        const { waitForRequests } = failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        requestCancelled('1');
+        waitForRequests(2000);
+
+        const start = Date.now();
+        await runCommands();
+        chai.expect(Date.now() - start).to.be.within(500, 700);
+    });
+
+    it('WHEN page unloads with a request pending THEN expect it to resolve at the first check', async () => {
+        const { waitForRequests } = failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        windowUnload();
         waitForRequests(2000);
 
         const start = Date.now();
