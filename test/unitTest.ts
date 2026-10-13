@@ -326,7 +326,7 @@ describe('test:after:run handler', () => {
     it('WHEN requests were added to getConfig() during a test THEN expect them gone after test:after:run', () => {
         const { getConfig } = failOnNetworkError({ requests: ['foo'] });
 
-        getConfig().requests.push('bar');
+        getConfig().requests.push({ url: 'bar' });
         testAfterRun();
 
         chai.expect(getConfig()).to.deep.equal(
@@ -337,12 +337,39 @@ describe('test:after:run handler', () => {
     it('WHEN an entry of getConfig() was changed during a test THEN expect the original entry after test:after:run', () => {
         const { getConfig } = failOnNetworkError({ requests: ['foo'] });
 
-        (getConfig().requests[0] as Request).url = 'bar';
+        getConfig().requests[0].url = 'bar';
         testAfterRun();
 
         chai.expect(getConfig()).to.deep.equal(
             createConfig({ requests: ['foo'] })
         );
+    });
+});
+
+describe('getConfig()', () => {
+    // the plugin matches against normalized entries, where a string would
+    // exclude every request and a numeric status none
+    it('WHEN a string or a numeric status is added to getConfig() THEN expect a type error', () => {
+        const { getConfig } = failOnNetworkError({ requests: ['foo'] });
+
+        // @ts-expect-error a string entry is not normalized to { url }
+        getConfig().requests.push('bar');
+        // @ts-expect-error a numeric status is not normalized to a range
+        getConfig().requests.push({ status: 500 });
+    });
+
+    it('WHEN config is created THEN expect getConfig() to return normalized entries', () => {
+        const { getConfig } = failOnNetworkError({
+            requests: [
+                'foo',
+                { method: 'get', status: 500 } as unknown as Request,
+            ],
+        });
+
+        chai.expect(getConfig().requests).to.deep.equal([
+            { url: 'foo', method: undefined, status: undefined },
+            { url: undefined, method: 'GET', status: { from: 500, to: 500 } },
+        ]);
     });
 });
 
@@ -499,7 +526,7 @@ describe('mapToRequests()', () => {
 
 describe('isRequestExcluded()', () => {
     it('WHEN request is excluded THEN expect true', () => {
-        const config: Required<Config> = createConfig({
+        const config = createConfig({
             requests: [{ url: 'foo', status: 400, method: 'GET' }],
         });
         const request: RequestSession = {
@@ -511,7 +538,7 @@ describe('isRequestExcluded()', () => {
         chai.expect(isRequestExcluded(request, config)).to.be.true;
     });
     it('WHEN request is not excluded THEN expect false', () => {
-        const config: Required<Config> = createConfig({
+        const config = createConfig({
             requests: [{ url: 'foo', status: 200, method: 'POST' }],
         });
         const request: RequestSession = {
@@ -535,7 +562,7 @@ describe('isRequestExcluded()', () => {
     });
 
     describe('WHEN config has status range 200 to 399', () => {
-        const config: Required<Config> = createConfig({
+        const config = createConfig({
             requests: [{ status: { from: 200, to: 399 } }],
         });
         const requestWithStatus = (status?: number): RequestSession => ({
@@ -568,7 +595,7 @@ describe('isRequestExcluded()', () => {
     });
 
     it('WHEN status range is reversed THEN expect statuses inside it to be excluded', () => {
-        const config: Required<Config> = createConfig({
+        const config = createConfig({
             requests: [{ status: { from: 399, to: 200 } }],
         });
         const request: RequestSession = {

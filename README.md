@@ -88,6 +88,8 @@ it('should tolerate an unavailable recommendations service', () => {
 });
 ```
 
+`getConfig()` returns each entry normalized: a string becomes `{ url }`, a number in `status` becomes `{ from, to }`, and `method` is upper case. Change the config through `setConfig()`, which accepts every form, rather than by changing what `getConfig()` returns.
+
 For TypeScript, see the command declarations in this repository's [support file](https://github.com/nils-hoyer/cypress-fail-on-network-error/blob/main/cypress/support/e2e.ts).
 
 ## Wait for pending requests
