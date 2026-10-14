@@ -11,12 +11,12 @@ on:
 jobs:
     build:
         runs-on: ubuntu-latest
-        # Cypress reports requests differently in Chrome, closer to how projects
-        # test in practice, and Electron, its default browser
+        # Cypress reports requests differently in Chrome and Firefox; Electron
+        # is deprecated as a test browser since Cypress 16
         strategy:
             fail-fast: false
             matrix:
-                browser: [chrome, electron]
+                browser: [chrome, firefox]
         env:
             BROWSER: ${{ matrix.browser }}
         steps:
