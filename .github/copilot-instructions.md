@@ -16,7 +16,7 @@
     - `GET /` serves a blank page.
     - `/xhr?status=&delay=` responds to any method with `status` after `delay` milliseconds (default `0`). `status=none` closes the connection without a response instead, which Cypress reports as a `request:error`. Electron and Firefox retry such a request, and each retry is a new request.
     - `GET /resources` serves a page that loads a script, a stylesheet and an image from the server, and sends one XHR.
-- `README.md`: user documentation. Update it whenever public API or behavior changes.
+- `README.md`: user documentation. Update it whenever public API or behavior changes. Do not document config validation there: an invalid config fails with a message that explains itself.
 
 ## Build and test
 
