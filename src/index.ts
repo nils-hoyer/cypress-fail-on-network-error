@@ -51,7 +51,9 @@ export default function failOnNetworkError(_config: Config = {}) {
         const requestsDone = () =>
             getRequests().every(
                 (request: RequestSession) =>
-                    request.status !== undefined || request.error !== undefined
+                    request.status !== undefined ||
+                    request.error !== undefined ||
+                    request.cancelled === true
             );
 
         // create the promise when the command runs, not when it is queued,
@@ -89,6 +91,19 @@ export default function failOnNetworkError(_config: Config = {}) {
         if (subscribedEvents.indexOf(eventName) === -1 || unknownRequest)
             return;
 
+        // the page aborted the request or navigated away: not a network error
+        if (
+            eventName === 'request:error' &&
+            isCancelledByBrowser(event.error?.message)
+        ) {
+            requests = requests.map((request: RequestSession) =>
+                request.requestId === event.requestId
+                    ? { ...request, cancelled: true }
+                    : request
+            );
+            return;
+        }
+
         requests = requests.map((request: RequestSession) => {
             if (request.requestId !== event.requestId) return request;
             return eventName === 'response:received'
@@ -118,6 +133,17 @@ export default function failOnNetworkError(_config: Config = {}) {
         if (!requestFailed) return;
         requestFailed = false;
         throw new AssertionError(`${prefix}\n${JSON.stringify(requests)}`);
+    });
+
+    // Electron and Firefox send no event for a request that the browser
+    // cancels when the page unloads, so waitForRequests would wait for it
+    // until its timeout. A response that still arrives is checked.
+    Cypress.on('window:unload', () => {
+        requests = requests.map((request: RequestSession) =>
+            request.status === undefined && request.error === undefined
+                ? { ...request, cancelled: true }
+                : request
+        );
     });
 
     Cypress.on('test:after:run', () => {
@@ -285,6 +311,11 @@ export const isRequestExcluded = (
     });
 };
 
+// Chrome reports a request that the page aborted, or that a navigation
+// cancelled, as a request:error with this message (seen with Cypress 16.1.1)
+const isCancelledByBrowser = (message: string | undefined): boolean =>
+    message?.indexOf('CDP Fetch request canceled by the browser:') === 0;
+
 const waitUntil = (predicate: () => boolean, timeout: number) => {
     const interval = 500;
     const endTime = new Date().getTime() + timeout;
@@ -311,4 +342,6 @@ export type RequestSession = {
     status?: number;
     // set when the request failed without a response
     error?: string;
+    // set when the browser cancelled the request, or its page unloaded
+    cancelled?: boolean;
 };

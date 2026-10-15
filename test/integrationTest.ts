@@ -9,9 +9,9 @@ import { start } from '../backend/app.cjs';
 type RunResult = CypressCommandLine.RunResult;
 type TestResult = CypressCommandLine.TestResult;
 
-// Electron, Cypress's default browser, ships with Cypress; BROWSER=chrome or
-// BROWSER=firefox runs the specs in another browser
-const browser = process.env.BROWSER ?? 'electron';
+// Chrome by default; BROWSER=firefox or BROWSER=electron runs the specs in
+// another browser. CI runs Chrome and Firefox, whose network events differ.
+const browser = process.env.BROWSER ?? 'chrome';
 const specs = readdirSync('cypress/e2e').filter((file) =>
     file.endsWith('.cy.ts')
 );

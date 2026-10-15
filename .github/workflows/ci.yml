@@ -11,6 +11,14 @@ on:
 jobs:
     build:
         runs-on: ubuntu-latest
+        # Cypress reports requests differently in Chrome and Firefox; Electron
+        # is deprecated as a test browser since Cypress 16
+        strategy:
+            fail-fast: false
+            matrix:
+                browser: [chrome, firefox]
+        env:
+            BROWSER: ${{ matrix.browser }}
         steps:
             - uses: actions/checkout@v7
             - name: Node LTS

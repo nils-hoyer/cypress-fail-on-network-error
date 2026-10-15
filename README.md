@@ -27,7 +27,7 @@ failOnNetworkError({
 });
 ```
 
-Every XHR and `fetch` request is checked, whatever its status, so without the entry above a `200` fails the test too. Page loads from `cy.visit()` and scripts, stylesheets and images are not checked.
+Every XHR and `fetch` request is checked, whatever its status, so without the entry above a `200` fails the test too. Page loads from `cy.visit()` and scripts, stylesheets and images are not checked. Neither are requests that the browser cancels, because the page aborted them (`AbortController`, `xhr.abort()`) or navigated away.
 
 When a request gets a response, or fails without one, and no entry in `requests` matches it, the test fails with an error that starts with `cypress-fail-on-network-error:` and lists the requests of the current test:
 
@@ -111,10 +111,12 @@ it('should check every request the page makes', () => {
 
 `waitForRequests(timeout = 10000)` waits until every request of the current test has a response or has failed. It checks every 500 ms, starting 500 ms after the command runs, so it also sees requests the page has just made. When the timeout passes first, the test continues without an error.
 
+It does not wait for requests that were pending when the page unloaded, such as after `cy.visit()` to another page; a response that still arrives is checked. Electron and Firefox report nothing for a request that the page aborts, so `waitForRequests` waits for it until the timeout.
+
 ## Contributing
 
 1. Open an issue that describes the problem and the expected behavior.
-2. Install dependencies with `npm ci`. The integration tests run Cypress in Electron, which comes with Cypress. `BROWSER=chrome` or `BROWSER=firefox` runs them in another installed browser.
+2. Install dependencies with `npm ci`. The integration tests run Cypress in Chrome, which must be installed. `BROWSER=firefox` runs them in Firefox. CI runs Chrome and Firefox.
 3. Make your change in `src/index.ts` and run `npm run build`. The tests run against `dist/`, which is not committed.
 4. Run `npm run verify` (build, type check, format check, unit and integration tests). It must pass.
 5. Open a PR with the implementation and tests. Don't change the version in `package.json`: the maintainer releases from GitHub Actions, which increases the version.
