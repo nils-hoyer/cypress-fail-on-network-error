@@ -159,6 +159,7 @@ export default function failOnNetworkError(_config: Config = {}) {
     };
 }
 
+const configKeys = ['requests'];
 const requestKeys = ['url', 'method', 'status'];
 
 // a broken config is not a failed check, so it throws an Error, not an AssertionError
@@ -171,6 +172,14 @@ const expectType = (value: unknown, types: string[], message: string) => {
 
 export const validateConfig = (config: Config): void => {
     expectType(config, ['Object'], 'config must be an object');
+    // a misspelled option would otherwise be ignored, and every request fail
+    const unknownConfigKeys = Object.keys(config).filter(
+        (key) => configKeys.indexOf(key) === -1
+    );
+    if (unknownConfigKeys.length > 0)
+        throw invalid(
+            `config has unknown keys ${unknownConfigKeys.join(', ')}, use requests`
+        );
     expectType(
         config.requests,
         ['Array', 'undefined'],
@@ -210,6 +219,14 @@ export const validateConfig = (config: Config): void => {
             ['string', 'RegExp', 'undefined'],
             `${name}.url must be a string or a RegExp`
         );
+        // new RegExp('') and /(?:)/ match every URL, like an empty url string
+        if (
+            typeDetect(request.url) === 'RegExp' &&
+            (request.url as RegExp).source === '(?:)'
+        )
+            throw invalid(
+                `${name}.url must not be an empty RegExp, or it matches every request`
+            );
         if (typeof request.url === 'string') {
             try {
                 new RegExp(request.url);
