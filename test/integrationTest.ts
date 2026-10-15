@@ -9,6 +9,10 @@ import { start } from '../backend/app.cjs';
 type RunResult = CypressCommandLine.RunResult;
 type TestResult = CypressCommandLine.TestResult;
 
+// VS Code sets ELECTRON_RUN_AS_NODE in its terminals, which stops the
+// Cypress binary from starting
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 // Chrome by default; BROWSER=firefox or BROWSER=electron runs the specs in
 // another browser. CI runs Chrome and Firefox, whose network events differ.
 const browser = process.env.BROWSER ?? 'chrome';
