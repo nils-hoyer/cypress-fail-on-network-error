@@ -487,6 +487,24 @@ describe('validateConfig()', () => {
         });
     });
 
+    [
+        [{ request: ['foo'] }, "{ request: ['foo'] }"],
+        [
+            { requests: ['foo'], request: undefined },
+            "{ requests: ['foo'], request: undefined }",
+        ],
+    ].forEach(([config, title]) => {
+        it(`WHEN config ${title} has an unknown key THEN expect error naming the key`, () => {
+            expectInvalid(config, 'config has unknown keys request');
+        });
+    });
+
+    it('WHEN requests is undefined THEN expect no error', () => {
+        chai.expect(() =>
+            validateConfig({ requests: undefined })
+        ).to.not.throw();
+    });
+
     ['foo', {}, null].forEach((requests) => {
         it(`WHEN requests is ${JSON.stringify(requests)} THEN expect error naming config.requests`, () => {
             expectInvalid({ requests }, 'config.requests');
@@ -516,6 +534,27 @@ describe('validateConfig()', () => {
             expectInvalid(config, 'config.requests[1]');
             expectInvalid(config, 'stauts');
         });
+    });
+
+    [
+        [{ url: /(?:)/ }, '{ url: /(?:)/ }'],
+        [
+            { url: new RegExp(''), status: 500 },
+            "{ url: new RegExp(''), status: 500 }",
+        ],
+    ].forEach(([entry, title]) => {
+        it(`WHEN url of entry ${title} is an empty RegExp THEN expect error naming the entry and key`, () => {
+            expectInvalid(
+                { requests: ['foo', entry] },
+                'config.requests[1].url'
+            );
+        });
+    });
+
+    it('WHEN url is a RegExp that is not empty but matches every URL THEN expect no error', () => {
+        chai.expect(() =>
+            validateConfig({ requests: [{ url: /.*/ }] })
+        ).to.not.throw();
     });
 
     ['(', { url: '[a-' }].forEach((entry) => {

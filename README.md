@@ -62,8 +62,6 @@ failOnNetworkError(config);
 - `status` is a number, or a range `{ from, to }` that includes both ends.
 - A request that fails without a response, for example when the connection is refused, has no status. Only entries without `status` match it.
 
-An invalid config, such as `status: '404'` or a misspelled field, throws an `Error` that names the entry and field.
-
 ## Change the config in a test
 
 `failOnNetworkError()` returns `getConfig()` and `setConfig()`. Wrap them in a command in your support file:
