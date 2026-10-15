@@ -37,7 +37,7 @@ When a request gets a response, or fails without one, and no entry in `ignoreReq
 
 | Option           | Default | Description |
 | ---------------- | ------- | ----------- |
-| `ignoreRequests` | `[]`    | Requests that don't fail a test, as `string` (shorthand for `{ url }`) or `{ url, method, status }`. A request that matches any entry is excluded. `requests`, its old name, still works. |
+| `ignoreRequests` | `[]`    | Requests that don't fail a test, as `string` (shorthand for `{ url }`) or `{ url, glob, method, status }`. A request that matches any entry is excluded. `requests`, its old name, still works. |
 
 ```ts
 import failOnNetworkError, { Config } from 'cypress-fail-on-network-error';
@@ -47,6 +47,7 @@ const config: Config = {
         { status: { from: 200, to: 399 } },
         'analytics', // any request whose URL contains "analytics"
         { url: /\/api\/feature-flags/, method: 'GET', status: 404 },
+        { glob: '**/api/users/*', status: 404 },
         { method: 'POST', status: 409 }, // a 409 from any POST request
         { method: ['HEAD', 'OPTIONS'] }, // any HEAD or OPTIONS request
     ],
@@ -59,6 +60,7 @@ failOnNetworkError(config);
 
 - Every field an entry sets must match. A field it leaves out matches any value.
 - `url` is a `string` or `RegExp` that matches anywhere in the full URL. Strings are converted with `new RegExp(string)`, so [escape special characters](https://javascript.info/regexp-escaping).
+- `glob` is a glob pattern, such as `**/api/users/*`, that matches like a URL string in `cy.intercept()`: the full URL contains it, or [minimatch](https://github.com/isaacs/minimatch) matches the URL with it (`matchBase: true`).
 - `method` is any HTTP method, such as `GET`, `HEAD` or `OPTIONS`, in any case, or a list of methods, which matches any of them.
 - `status` is a number, or a range `{ from, to }` that includes both ends.
 - A request that fails without a response, for example when the connection is refused, has no status. Only entries without `status` match it.

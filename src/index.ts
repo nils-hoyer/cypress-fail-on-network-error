@@ -21,6 +21,8 @@ export type Method =
 
 export interface RequestMatcher {
     url?: string | RegExp;
+    // a glob like cy.intercept's, such as '**/api/users/*'
+    glob?: string;
     // a list matches any of its methods
     method?: Method | Method[];
     status?: number | Range;
@@ -41,6 +43,7 @@ export type Range = {
 // and the method upper case
 export type NormalizedRequest = {
     url?: string | RegExp;
+    glob?: string;
     method?: RequestMatcher['method'];
     status?: Range;
 };
@@ -182,7 +185,7 @@ export default function failOnNetworkError(_config: Config = {}) {
 
 // requests is the deprecated name of ignoreRequests
 const configKeys = ['ignoreRequests', 'requests'];
-const requestKeys = ['url', 'method', 'status'];
+const requestKeys = ['url', 'glob', 'method', 'status'];
 
 // a broken config is not a failed check, so it throws an Error, not an AssertionError
 const invalid = (message: string) => new Error(`${prefix} ${message}`);
@@ -235,15 +238,15 @@ const validateRequests = (requests: unknown, key: string): void => {
         );
         if (unknownKeys.length > 0)
             throw invalid(
-                `${name} has unknown keys ${unknownKeys.join(', ')}, use url, method or status`
+                `${name} has unknown keys ${unknownKeys.join(', ')}, use url, glob, method or status`
             );
-        // an empty url is ignored when matching, like an omitted one
+        // an empty url or glob is ignored when matching, like an omitted one
         const setKeys = requestKeys.filter(
             (key) => request[key] !== undefined && request[key] !== ''
         );
         if (setKeys.length === 0)
             throw invalid(
-                `${name} must set url, method or status, or it excludes every request`
+                `${name} must set url, glob, method or status, or it excludes every request`
             );
 
         expectType(
@@ -268,6 +271,11 @@ const validateRequests = (requests: unknown, key: string): void => {
                 );
             }
         }
+        expectType(
+            request.glob,
+            ['string', 'undefined'],
+            `${name}.glob must be a string`
+        );
         expectType(
             request.method,
             ['string', 'Array', 'undefined'],
@@ -347,6 +355,7 @@ export const mapToRequests = (
 
             return {
                 url: unknown.url,
+                glob: unknown.glob,
                 method: upperCaseMethod(unknown.method),
                 status,
             };
@@ -354,10 +363,16 @@ export const mapToRequests = (
 
         return {
             url: unknown,
+            glob: undefined,
             method: undefined,
             status: undefined,
         };
     });
+
+// like cy.intercept: the URL contains the glob, or minimatch matches it
+const matchesGlob = (url: string, glob: string): boolean =>
+    url.indexOf(glob) !== -1 ||
+    Cypress.minimatch(url, glob, { matchBase: true });
 
 // matched against the request's method in upper case
 const upperCaseMethod = (
@@ -386,6 +401,9 @@ export const isRequestExcluded = (
         const urlMatch = configRequest.url
             ? new RegExp(configRequest.url).test(request.url)
             : true;
+        const globMatch = configRequest.glob
+            ? matchesGlob(request.url, configRequest.glob)
+            : true;
         const statusMatch = configRequest.status
             ? request.status !== undefined &&
               request.status >= configRequest.status.from &&
@@ -397,7 +415,7 @@ export const isRequestExcluded = (
                   request.method.toUpperCase()
               ) !== -1
             : true;
-        return urlMatch && statusMatch && methodMatch;
+        return urlMatch && globMatch && statusMatch && methodMatch;
     });
 };
 

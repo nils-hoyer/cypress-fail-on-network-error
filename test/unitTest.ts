@@ -93,6 +93,8 @@ beforeEach(() => {
             (listeners[eventName] ??= []).push(listener);
         },
         Promise,
+        // the glob tests replace it; Cypress bundles the real minimatch
+        minimatch: () => false,
     };
     commands = [];
     (globalThis as any).cy = {
@@ -476,8 +478,18 @@ describe('getConfig()', () => {
         });
 
         chai.expect(getConfig().ignoreRequests).to.deep.equal([
-            { url: 'foo', method: undefined, status: undefined },
-            { url: undefined, method: 'GET', status: { from: 500, to: 500 } },
+            {
+                url: 'foo',
+                glob: undefined,
+                method: undefined,
+                status: undefined,
+            },
+            {
+                url: undefined,
+                glob: undefined,
+                method: 'GET',
+                status: { from: 500, to: 500 },
+            },
         ]);
     });
 });
@@ -647,6 +659,7 @@ describe('validateConfig()', () => {
         [{}, '{}'],
         [{ url: undefined }, '{ url: undefined }'],
         [{ url: '' }, "{ url: '' }"],
+        [{ glob: '' }, "{ glob: '' }"],
         ['', "''"],
     ].forEach(([entry, title]) => {
         it(`WHEN entry ${title} sets none of url, method or status THEN expect error naming the entry`, () => {
@@ -697,6 +710,7 @@ describe('validateConfig()', () => {
 
     [
         { url: 42 },
+        { glob: 42 },
         { method: 42 },
         { status: '400' },
         { status: { from: 200 } },
@@ -790,11 +804,27 @@ describe('mapToRequests()', () => {
 
         const mappedRequests = mapToRequests(requests);
         chai.expect(mappedRequests).to.deep.equal([
-            { url: 'url1', status: undefined, method: undefined },
-            { url: 'url2', status: { from: 400, to: 400 }, method: 'GET' },
-            { url: undefined, status: undefined, method: 'GET' },
+            {
+                url: 'url1',
+                glob: undefined,
+                status: undefined,
+                method: undefined,
+            },
+            {
+                url: 'url2',
+                glob: undefined,
+                status: { from: 400, to: 400 },
+                method: 'GET',
+            },
             {
                 url: undefined,
+                glob: undefined,
+                status: undefined,
+                method: 'GET',
+            },
+            {
+                url: undefined,
+                glob: undefined,
                 status: { from: 200, to: 399 },
                 method: undefined,
             },
@@ -803,13 +833,35 @@ describe('mapToRequests()', () => {
     it('WHEN method is lower case THEN expect it upper-cased', () => {
         chai.expect(
             mapToRequests([{ method: 'get' } as unknown as RequestMatcher])
-        ).to.deep.equal([{ url: undefined, status: undefined, method: 'GET' }]);
+        ).to.deep.equal([
+            {
+                url: undefined,
+                glob: undefined,
+                status: undefined,
+                method: 'GET',
+            },
+        ]);
+    });
+    it('WHEN entry has a glob THEN expect it kept', () => {
+        chai.expect(mapToRequests([{ glob: '**/api/*' }])).to.deep.equal([
+            {
+                url: undefined,
+                glob: '**/api/*',
+                status: undefined,
+                method: undefined,
+            },
+        ]);
     });
     it('WHEN method is a list THEN expect each method upper-cased', () => {
         chai.expect(
             mapToRequests([{ method: ['get', 'Purge'] }])
         ).to.deep.equal([
-            { url: undefined, status: undefined, method: ['GET', 'PURGE'] },
+            {
+                url: undefined,
+                glob: undefined,
+                status: undefined,
+                method: ['GET', 'PURGE'],
+            },
         ]);
     });
     it('WHEN status range is reversed THEN expect from and to swapped', () => {
@@ -818,6 +870,7 @@ describe('mapToRequests()', () => {
         ).to.deep.equal([
             {
                 url: undefined,
+                glob: undefined,
                 status: { from: 200, to: 399 },
                 method: undefined,
             },
@@ -881,6 +934,62 @@ describe('isRequestExcluded()', () => {
                 status: 500,
             };
             chai.expect(isRequestExcluded(request, config)).to.equal(expected);
+        });
+    });
+
+    describe('WHEN entry has a glob', () => {
+        let minimatchCalls: unknown[][];
+        const request: RequestSession = {
+            requestId: '1',
+            method: 'GET',
+            url: 'http://localhost/api/users/1',
+            status: 500,
+        };
+        const stubMinimatch = (result: boolean) => {
+            minimatchCalls = [];
+            (globalThis as any).Cypress.minimatch = (...args: unknown[]) => {
+                minimatchCalls.push(args);
+                return result;
+            };
+        };
+
+        it('WHEN Cypress.minimatch matches the URL THEN expect true and matchBase like cy.intercept', () => {
+            stubMinimatch(true);
+            const config = createConfig({
+                ignoreRequests: [{ glob: '**/users/*' }],
+            });
+
+            chai.expect(isRequestExcluded(request, config)).to.be.true;
+            chai.expect(minimatchCalls).to.deep.equal([
+                [request.url, '**/users/*', { matchBase: true }],
+            ]);
+        });
+
+        it('WHEN the URL contains the glob as text THEN expect true, like cy.intercept', () => {
+            stubMinimatch(false);
+            const config = createConfig({
+                ignoreRequests: [{ glob: '/api/users' }],
+            });
+
+            chai.expect(isRequestExcluded(request, config)).to.be.true;
+        });
+
+        it('WHEN Cypress.minimatch does not match and the URL does not contain the glob THEN expect false', () => {
+            stubMinimatch(false);
+            const config = createConfig({
+                ignoreRequests: [{ glob: '**/orders/*' }],
+            });
+
+            chai.expect(isRequestExcluded(request, config)).to.be.false;
+        });
+
+        it('WHEN the glob matches but the status does not THEN expect false', () => {
+            stubMinimatch(true);
+            const config = createConfig({
+                ignoreRequests: [{ glob: '**/users/*', status: 404 }],
+            });
+
+            chai.expect(isRequestExcluded(request, config)).to.be.false;
         });
     });
 
