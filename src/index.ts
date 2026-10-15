@@ -3,9 +3,9 @@ import { AssertionError } from 'chai';
 const prefix = 'cypress-fail-on-network-error:';
 
 export type Config = {
-    ignoreRequests?: (string | RequestMatcher)[];
+    ignoreRequests?: (string | RequestMatcher | RequestPredicate)[];
     /** @deprecated Use `ignoreRequests`. When both are set, `requests` wins. */
-    requests?: (string | RequestMatcher)[];
+    requests?: (string | RequestMatcher | RequestPredicate)[];
 };
 
 // the common methods, for autocompletion; any other method works too
@@ -24,7 +24,12 @@ export interface RequestMatcher {
     // a list matches any of its methods
     method?: Method | Method[];
     status?: number | Range;
+    // excludes the request when it returns true
+    predicate?: RequestPredicate;
 }
+
+// an entry of its own is shorthand for { predicate }
+export type RequestPredicate = (request: RequestSession) => boolean;
 
 /**
  * @deprecated Use `RequestMatcher`. `Request` hides the built-in fetch
@@ -37,12 +42,13 @@ export type Range = {
     to: number;
 };
 
-// an entry as getConfig() returns it: a string is { url }, a status a range
-// and the method upper case
+// an entry as getConfig() returns it: a string is { url }, a function
+// { predicate }, a status a range and the method upper case
 export type NormalizedRequest = {
     url?: string | RegExp;
     method?: RequestMatcher['method'];
     status?: Range;
+    predicate?: RequestPredicate;
 };
 
 export type NormalizedConfig = {
@@ -57,6 +63,8 @@ export default function failOnNetworkError(_config: Config = {}) {
     let requests: RequestSession[] = [];
     // set when a request matched no entry, until the next command:end throws
     let requestFailed = false;
+    // set when a predicate threw, until the next command:end throws
+    let predicateError: Error | undefined;
 
     const getRequests = () => requests;
 
@@ -137,13 +145,17 @@ export default function failOnNetworkError(_config: Config = {}) {
                   };
         });
 
-        if (
-            !isRequestExcluded(
-                findRequest(requests, event.requestId) as RequestSession,
-                getConfig()
-            )
-        ) {
-            requestFailed = true;
+        const request = findRequest(
+            requests,
+            event.requestId
+        ) as RequestSession;
+        try {
+            if (!isRequestExcluded(request, getConfig())) requestFailed = true;
+        } catch (error) {
+            // a broken predicate is a mistake in the config, not a failed check
+            predicateError = invalid(
+                `a predicate in ignoreRequests threw on ${request.method} ${request.url}: ${error instanceof Error ? error.message : String(error)}`
+            );
         }
     });
 
@@ -151,6 +163,11 @@ export default function failOnNetworkError(_config: Config = {}) {
     // a thrown error is an uncaught exception that uncaught:exception handlers
     // can hide. command:end runs inside the queue and fails the command.
     Cypress.on('command:end', () => {
+        if (predicateError !== undefined) {
+            const error = predicateError;
+            predicateError = undefined;
+            throw error;
+        }
         if (!requestFailed) return;
         requestFailed = false;
         throw new AssertionError(`${prefix}\n${JSON.stringify(requests)}`);
@@ -171,6 +188,7 @@ export default function failOnNetworkError(_config: Config = {}) {
         setConfig(originConfig);
         requests = [];
         requestFailed = false;
+        predicateError = undefined;
     });
 
     return {
@@ -182,7 +200,7 @@ export default function failOnNetworkError(_config: Config = {}) {
 
 // requests is the deprecated name of ignoreRequests
 const configKeys = ['ignoreRequests', 'requests'];
-const requestKeys = ['url', 'method', 'status'];
+const requestKeys = ['url', 'method', 'status', 'predicate'];
 
 // a broken config is not a failed check, so it throws an Error, not an AssertionError
 const invalid = (message: string) => new Error(`${prefix} ${message}`);
@@ -222,12 +240,16 @@ const validateRequests = (requests: unknown, key: string): void => {
         const name = `${key}[${index}]`;
         expectType(
             _request,
-            ['string', 'Object'],
-            `${name} must be a string or an object`
+            ['string', 'Object', 'function'],
+            `${name} must be a string, an object or a function`
         );
 
         const request = (
-            typeof _request === 'string' ? { url: _request } : _request
+            typeof _request === 'string'
+                ? { url: _request }
+                : typeof _request === 'function'
+                  ? { predicate: _request }
+                  : _request
         ) as Record<string, unknown>;
 
         const unknownKeys = Object.keys(request).filter(
@@ -235,7 +257,7 @@ const validateRequests = (requests: unknown, key: string): void => {
         );
         if (unknownKeys.length > 0)
             throw invalid(
-                `${name} has unknown keys ${unknownKeys.join(', ')}, use url, method or status`
+                `${name} has unknown keys ${unknownKeys.join(', ')}, use url, method, status or predicate`
             );
         // an empty url is ignored when matching, like an omitted one
         const setKeys = requestKeys.filter(
@@ -243,7 +265,7 @@ const validateRequests = (requests: unknown, key: string): void => {
         );
         if (setKeys.length === 0)
             throw invalid(
-                `${name} must set url, method or status, or it excludes every request`
+                `${name} must set url, method, status or predicate, or it excludes every request`
             );
 
         expectType(
@@ -268,6 +290,11 @@ const validateRequests = (requests: unknown, key: string): void => {
                 );
             }
         }
+        expectType(
+            request.predicate,
+            ['function', 'undefined'],
+            `${name}.predicate must be a function`
+        );
         expectType(
             request.method,
             ['string', 'Array', 'undefined'],
@@ -331,9 +358,18 @@ export const createConfig = (config: Config): NormalizedConfig => {
 };
 
 export const mapToRequests = (
-    _unknowns: (string | RequestMatcher)[]
+    _unknowns: (string | RequestMatcher | RequestPredicate)[]
 ): NormalizedRequest[] =>
-    _unknowns.map((unknown: string | RequestMatcher) => {
+    _unknowns.map((unknown: string | RequestMatcher | RequestPredicate) => {
+        if (typeof unknown === 'function') {
+            return {
+                url: undefined,
+                method: undefined,
+                status: undefined,
+                predicate: unknown,
+            };
+        }
+
         if (typeof unknown !== 'string') {
             let status: Range | undefined = undefined;
 
@@ -349,6 +385,7 @@ export const mapToRequests = (
                 url: unknown.url,
                 method: upperCaseMethod(unknown.method),
                 status,
+                predicate: unknown.predicate,
             };
         }
 
@@ -356,6 +393,7 @@ export const mapToRequests = (
             url: unknown,
             method: undefined,
             status: undefined,
+            predicate: undefined,
         };
     });
 
@@ -397,7 +435,12 @@ export const isRequestExcluded = (
                   request.method.toUpperCase()
               ) !== -1
             : true;
-        return urlMatch && statusMatch && methodMatch;
+        if (!(urlMatch && statusMatch && methodMatch)) return false;
+        // called only when the other fields match, with a copy, so it cannot
+        // change the tracked request
+        return configRequest.predicate
+            ? Boolean(configRequest.predicate({ ...request }))
+            : true;
     });
 };
 

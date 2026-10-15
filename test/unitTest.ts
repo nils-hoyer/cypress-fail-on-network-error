@@ -289,6 +289,60 @@ describe('request:event handler', () => {
         });
     });
 
+    it('WHEN a predicate throws THEN expect a plain Error naming the request at command:end', () => {
+        failOnNetworkError({
+            ignoreRequests: [
+                () => {
+                    throw new Error('predicate broke');
+                },
+            ],
+        });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        chai.expect(() => responseReceived('1', 500)).to.not.throw();
+
+        chai.expect(commandEnd)
+            .to.throw(Error)
+            .with.property('constructor', Error);
+        chai.expect(commandEnd).to.not.throw();
+    });
+
+    it('WHEN a predicate throws THEN expect the message to name the request and the error', () => {
+        failOnNetworkError({
+            ignoreRequests: [
+                () => {
+                    throw new Error('predicate broke');
+                },
+            ],
+        });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 500);
+
+        chai.expect(commandEnd)
+            .to.throw()
+            .with.property('message')
+            .that.matches(/^cypress-fail-on-network-error:/)
+            .and.contains('GET http://foo')
+            .and.contains('predicate broke');
+    });
+
+    it('WHEN a predicate threw after the last command THEN expect test:after:run to drop it', () => {
+        failOnNetworkError({
+            ignoreRequests: [
+                () => {
+                    throw new Error('predicate broke');
+                },
+            ],
+        });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 500);
+        testAfterRun();
+
+        chai.expect(commandEnd).to.not.throw();
+    });
+
     it('WHEN event is not a request event THEN expect it to be ignored', () => {
         failOnNetworkError();
 
@@ -441,6 +495,17 @@ describe('types', () => {
 
         chai.expect(() => validateConfig(config)).to.not.throw();
     });
+    it('WHEN an entry is a function or sets predicate THEN expect it to compile', () => {
+        const config: Config = {
+            ignoreRequests: [
+                (request) => request.status === 404,
+                { method: 'POST', predicate: (request) => !request.error },
+            ],
+        };
+
+        chai.expect(() => validateConfig(config)).to.not.throw();
+    });
+
     it('WHEN method is any string or a list of methods THEN expect it to compile', () => {
         const config: Config = {
             ignoreRequests: [
@@ -476,8 +541,18 @@ describe('getConfig()', () => {
         });
 
         chai.expect(getConfig().ignoreRequests).to.deep.equal([
-            { url: 'foo', method: undefined, status: undefined },
-            { url: undefined, method: 'GET', status: { from: 500, to: 500 } },
+            {
+                url: 'foo',
+                method: undefined,
+                status: undefined,
+                predicate: undefined,
+            },
+            {
+                url: undefined,
+                method: 'GET',
+                status: { from: 500, to: 500 },
+                predicate: undefined,
+            },
         ]);
     });
 });
@@ -680,6 +755,19 @@ describe('validateConfig()', () => {
         });
     });
 
+    it('WHEN entry sets only predicate THEN expect no error', () => {
+        chai.expect(() =>
+            validateConfig({ ignoreRequests: [{ predicate: () => true }] })
+        ).to.not.throw();
+    });
+
+    it('WHEN predicate is not a function THEN expect error naming the entry and key', () => {
+        expectInvalid(
+            { ignoreRequests: ['foo', { predicate: true }] },
+            'config.ignoreRequests[1].predicate'
+        );
+    });
+
     it('WHEN url is a RegExp that is not empty but matches every URL THEN expect no error', () => {
         chai.expect(() =>
             validateConfig({ ignoreRequests: [{ url: /.*/ }] })
@@ -717,10 +805,13 @@ describe('validateConfig()', () => {
             { ignoreRequests: {} },
             'config.ignoreRequests must be an array, got Object',
         ],
-        [{ ignoreRequests: [42] }, 'must be a string or an object, got number'],
+        [
+            { ignoreRequests: [42] },
+            'must be a string, an object or a function, got number',
+        ],
         [
             { ignoreRequests: [/foo/] },
-            'must be a string or an object, got RegExp',
+            'must be a string, an object or a function, got RegExp',
         ],
         [
             { ignoreRequests: [{ url: () => true }] },
@@ -790,26 +881,67 @@ describe('mapToRequests()', () => {
 
         const mappedRequests = mapToRequests(requests);
         chai.expect(mappedRequests).to.deep.equal([
-            { url: 'url1', status: undefined, method: undefined },
-            { url: 'url2', status: { from: 400, to: 400 }, method: 'GET' },
-            { url: undefined, status: undefined, method: 'GET' },
+            {
+                url: 'url1',
+                status: undefined,
+                method: undefined,
+                predicate: undefined,
+            },
+            {
+                url: 'url2',
+                status: { from: 400, to: 400 },
+                method: 'GET',
+                predicate: undefined,
+            },
+            {
+                url: undefined,
+                status: undefined,
+                method: 'GET',
+                predicate: undefined,
+            },
             {
                 url: undefined,
                 status: { from: 200, to: 399 },
                 method: undefined,
+                predicate: undefined,
             },
         ]);
     });
     it('WHEN method is lower case THEN expect it upper-cased', () => {
         chai.expect(
             mapToRequests([{ method: 'get' } as unknown as RequestMatcher])
-        ).to.deep.equal([{ url: undefined, status: undefined, method: 'GET' }]);
+        ).to.deep.equal([
+            {
+                url: undefined,
+                status: undefined,
+                method: 'GET',
+                predicate: undefined,
+            },
+        ]);
     });
+    it('WHEN entry is a function THEN expect it as predicate', () => {
+        const predicate = () => true;
+
+        chai.expect(mapToRequests([predicate])).to.deep.equal([
+            {
+                url: undefined,
+                method: undefined,
+                status: undefined,
+                predicate,
+            },
+        ]);
+    });
+
     it('WHEN method is a list THEN expect each method upper-cased', () => {
         chai.expect(
             mapToRequests([{ method: ['get', 'Purge'] }])
         ).to.deep.equal([
-            { url: undefined, status: undefined, method: ['GET', 'PURGE'] },
+            {
+                url: undefined,
+                status: undefined,
+                method: ['GET', 'PURGE'],
+                predicate: undefined,
+            },
         ]);
     });
     it('WHEN status range is reversed THEN expect from and to swapped', () => {
@@ -820,6 +952,7 @@ describe('mapToRequests()', () => {
                 url: undefined,
                 status: { from: 200, to: 399 },
                 method: undefined,
+                predicate: undefined,
             },
         ]);
     });
@@ -881,6 +1014,61 @@ describe('isRequestExcluded()', () => {
                 status: 500,
             };
             chai.expect(isRequestExcluded(request, config)).to.equal(expected);
+        });
+    });
+
+    describe('WHEN entry has a predicate', () => {
+        const request: RequestSession = {
+            requestId: '1',
+            method: 'GET',
+            url: 'http://foo',
+            status: 404,
+        };
+
+        [true, false].forEach((result) => {
+            it(`WHEN the predicate returns ${result} THEN expect ${result}`, () => {
+                const config = createConfig({ ignoreRequests: [() => result] });
+
+                chai.expect(isRequestExcluded(request, config)).to.equal(
+                    result
+                );
+            });
+        });
+
+        it('WHEN the predicate is called THEN expect it to get a copy of the request', () => {
+            let received: RequestSession | undefined;
+            const config = createConfig({
+                ignoreRequests: [
+                    (request) => {
+                        received = request;
+                        request.status = 200;
+                        return false;
+                    },
+                ],
+            });
+
+            isRequestExcluded(request, config);
+
+            chai.expect(received).to.deep.equal({ ...request, status: 200 });
+            chai.expect(request.status).to.equal(404);
+        });
+
+        it('WHEN the other fields of its entry do not match THEN expect the predicate not to be called', () => {
+            let called = false;
+            const config = createConfig({
+                ignoreRequests: [
+                    {
+                        status: 500,
+                        predicate: () => {
+                            called = true;
+                            return true;
+                        },
+                    },
+                ],
+            });
+
+            chai.expect(isRequestExcluded(request, config)).to.be.false;
+            chai.expect(called).to.be.false;
         });
     });
 

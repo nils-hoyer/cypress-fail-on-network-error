@@ -37,7 +37,7 @@ When a request gets a response, or fails without one, and no entry in `ignoreReq
 
 | Option           | Default | Description |
 | ---------------- | ------- | ----------- |
-| `ignoreRequests` | `[]`    | Requests that don't fail a test, as `string` (shorthand for `{ url }`) or `{ url, method, status }`. A request that matches any entry is excluded. `requests`, its old name, still works. |
+| `ignoreRequests` | `[]`    | Requests that don't fail a test, as `string` (shorthand for `{ url }`), `{ url, method, status, predicate }`, or a function (shorthand for `{ predicate }`). A request that matches any entry is excluded. `requests`, its old name, still works. |
 
 ```ts
 import failOnNetworkError, { Config } from 'cypress-fail-on-network-error';
@@ -49,6 +49,7 @@ const config: Config = {
         { url: /\/api\/feature-flags/, method: 'GET', status: 404 },
         { method: 'POST', status: 409 }, // a 409 from any POST request
         { method: ['HEAD', 'OPTIONS'] }, // any HEAD or OPTIONS request
+        ({ url, status }) => status === 404 && url.endsWith('.map'),
     ],
 };
 
@@ -61,6 +62,7 @@ failOnNetworkError(config);
 - `url` is a `string` or `RegExp` that matches anywhere in the full URL. Strings are converted with `new RegExp(string)`, so [escape special characters](https://javascript.info/regexp-escaping).
 - `method` is any HTTP method, such as `GET`, `HEAD` or `OPTIONS`, in any case, or a list of methods, which matches any of them.
 - `status` is a number, or a range `{ from, to }` that includes both ends.
+- `predicate` is a function that gets the request's `method`, `url`, and `status` or `error`, and excludes it when it returns `true`. It is called only when the other fields of its entry match. An error it throws fails the test.
 - A request that fails without a response, for example when the connection is refused, has no status. Only entries without `status` match it.
 
 ## Change the config in a test
