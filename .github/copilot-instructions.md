@@ -27,7 +27,7 @@
     2. `lint`: `tsc` type checks for `src/`, `test/` and `cypress/`.
     3. `prettier:check`
     4. `test`: unit tests, then integration tests.
-- The integration tests start the test server themselves on a free port, so a dev server on port 3000 does not get in the way.
+- The integration tests start the test server themselves on a free port, so a dev server on port 3000 does not get in the way. They also remove `ELECTRON_RUN_AS_NODE`, which VS Code sets in its terminals and which stops the Cypress binary from starting; run `npx cypress open` there with `ELECTRON_RUN_AS_NODE= npx cypress open`.
 - Tests run against `dist/`, not `src/`. Rebuild (`npm run build:fe`) before running tests after a source change.
 - `npm run test:ut` runs the unit tests only, which is the fast loop. `npm run test:it` takes about 30 s, because it launches Cypress and runs every spec.
 - `npm run dev` rebuilds `dist/` on source changes and restarts the test server on backend changes.
