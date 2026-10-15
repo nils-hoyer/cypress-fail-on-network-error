@@ -7,6 +7,8 @@ import failOnNetworkError, {
     type RequestMatcher,
     type RequestSession,
     createConfig,
+    entryToString,
+    escapeMarkdown,
     isRequestExcluded,
     mapToRequests,
     validateConfig,
@@ -14,6 +16,14 @@ import failOnNetworkError, {
 
 type Listener = (...args: any[]) => unknown;
 let listeners: Record<string, Listener[]> = {};
+
+type LogOptions = {
+    name: string;
+    displayName: string;
+    message: string;
+    consoleProps: () => Record<string, unknown>;
+};
+let logs: LogOptions[] = [];
 
 const emit = (eventName: string, ...args: unknown[]) =>
     listeners[eventName]?.forEach((listener) => listener(...args));
@@ -88,11 +98,15 @@ const runCommands = async () => {
 
 beforeEach(() => {
     listeners = {};
+    logs = [];
     (globalThis as any).Cypress = {
         on: (eventName: string, listener: Listener) => {
             (listeners[eventName] ??= []).push(listener);
         },
         Promise,
+        log: (options: LogOptions) => {
+            logs.push(options);
+        },
     };
     commands = [];
     (globalThis as any).cy = {
@@ -419,6 +433,178 @@ describe('request:event handler', () => {
     });
 });
 
+describe('failure message and command log', () => {
+    it('WHEN one request fails and another is excluded THEN expect the message to list only the failing one', () => {
+        failOnNetworkError({ ignoreRequests: ['foo'] });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        incomingRequest('2', 'POST', 'http://bar');
+        responseReceived('1', 500);
+        responseReceived('2', 500);
+
+        chai.expect(commandEnd)
+            .to.throw(AssertionError)
+            .with.property(
+                'message',
+                'cypress-fail-on-network-error:\nPOST http://bar → 500'
+            );
+    });
+
+    it('WHEN two requests fail THEN expect one line each', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        incomingRequest('2', 'GET', 'http://bar');
+        responseReceived('1', 404);
+        requestError('2', 'socket hang up');
+
+        chai.expect(commandEnd)
+            .to.throw(AssertionError)
+            .with.property(
+                'message',
+                'cypress-fail-on-network-error:\nGET http://foo → 404\nGET http://bar → socket hang up'
+            );
+    });
+
+    it('WHEN a failure was thrown THEN expect the next failure to list only new requests', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 500);
+        chai.expect(commandEnd).to.throw(AssertionError);
+
+        incomingRequest('2', 'GET', 'http://bar');
+        responseReceived('2', 500);
+        chai.expect(commandEnd)
+            .to.throw(AssertionError)
+            .with.property('message')
+            .that.does.not.contain('http://foo');
+    });
+
+    it('WHEN a request fails THEN expect it logged at command:end with its details', () => {
+        failOnNetworkError({ ignoreRequests: [{ status: 200 }] });
+
+        incomingRequest('1', 'GET', 'http://foo/a_b');
+        responseReceived('1', 500);
+        chai.expect(logs).to.be.empty;
+        chai.expect(commandEnd).to.throw(AssertionError);
+
+        chai.expect(logs).to.have.length(1);
+        chai.expect(logs[0]).to.include({
+            name: 'unexpected',
+            message: 'GET http://foo/a\\_b → 500',
+        });
+        chai.expect(logs[0].consoleProps()).to.deep.equal({
+            Request: 'GET http://foo/a_b',
+            Status: 500,
+            'Entries tried': mapToRequests([{ status: 200 }]),
+        });
+    });
+
+    it('WHEN a request fails without a response THEN expect its error in the details', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        requestError('1', 'socket hang up');
+        chai.expect(commandEnd).to.throw(AssertionError);
+
+        chai.expect(logs[0].consoleProps()).to.include({
+            Error: 'socket hang up',
+        });
+    });
+
+    it('WHEN debug is off THEN expect ignored requests not to be logged', () => {
+        failOnNetworkError({ ignoreRequests: ['foo'] });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 200);
+        commandEnd();
+
+        chai.expect(logs).to.be.empty;
+    });
+
+    it('WHEN debug is on THEN expect each ignored request logged with the entry that ignored it', () => {
+        failOnNetworkError({
+            ignoreRequests: [{ method: 'POST' }, { url: 'foo', status: 200 }],
+            debug: true,
+        });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 200);
+        chai.expect(commandEnd).to.not.throw();
+
+        chai.expect(logs).to.have.length(1);
+        chai.expect(logs[0]).to.include({
+            name: 'ignored',
+            message:
+                "**{ url: 'foo', status: 200 }** matched GET http://foo → 200",
+        });
+        chai.expect(logs[0].consoleProps()).to.deep.equal({
+            Request: 'GET http://foo',
+            Status: 200,
+            'Ignored by': mapToRequests([{ url: 'foo', status: 200 }])[0],
+            'As RegExp': /foo/,
+        });
+    });
+
+    it('WHEN debug is on and a request fails THEN expect both logged in order before the error', () => {
+        failOnNetworkError({ ignoreRequests: ['foo'], debug: true });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        incomingRequest('2', 'GET', 'http://bar');
+        responseReceived('1', 200);
+        responseReceived('2', 500);
+        chai.expect(commandEnd).to.throw(AssertionError);
+
+        chai.expect(logs.map((log) => log.name)).to.deep.equal([
+            'ignored',
+            'unexpected',
+        ]);
+    });
+});
+
+describe('entryToString()', () => {
+    [
+        [{ url: 'foo' }, "{ url: 'foo' }"],
+        [{ url: /fo\/o/i }, '{ url: /fo\\/o/i }'],
+        [{ url: "it's" }, "{ url: 'it\\'s' }"],
+        [{ method: 'get' }, "{ method: 'GET' }"],
+        [{ method: ['GET', 'PUT'] }, "{ method: ['GET', 'PUT'] }"],
+        [{ status: 404 }, '{ status: 404 }'],
+        [
+            { status: { from: 200, to: 399 } },
+            '{ status: { from: 200, to: 399 } }',
+        ],
+        [
+            { url: 'foo', method: 'GET', status: 500 },
+            "{ url: 'foo', method: 'GET', status: 500 }",
+        ],
+    ].forEach(([entry, expected]) => {
+        it(`WHEN entry is ${expected} THEN expect it written like the config`, () => {
+            chai.expect(
+                entryToString(mapToRequests([entry as RequestMatcher])[0])
+            ).to.equal(expected);
+        });
+    });
+
+    it('WHEN entry is a named function THEN expect its name', () => {
+        function isSourceMap() {
+            return true;
+        }
+        chai.expect(entryToString(mapToRequests([isSourceMap])[0])).to.equal(
+            '{ predicate: isSourceMap }'
+        );
+    });
+});
+
+describe('escapeMarkdown()', () => {
+    it('WHEN text has Markdown characters THEN expect them escaped', () => {
+        chai.expect(escapeMarkdown('a*b_c`d[e](f)')).to.equal(
+            'a\\*b\\_c\\`d\\[e\\]\\(f\\)'
+        );
+    });
+});
+
 describe('waitForRequests()', function () {
     this.timeout(5000);
 
@@ -680,12 +866,10 @@ describe('deprecated requests option', () => {
         chai.expect(getConfig().ignoreRequests).to.deep.equal([{ url: 'bar' }]);
     });
 
-    it('WHEN getConfig() is spread THEN expect only ignoreRequests to be copied', () => {
+    it('WHEN getConfig() is spread THEN expect requests not to be copied', () => {
         const { getConfig } = failOnNetworkError({ ignoreRequests: ['foo'] });
 
-        chai.expect(Object.keys({ ...getConfig() })).to.deep.equal([
-            'ignoreRequests',
-        ]);
+        chai.expect({ ...getConfig() }).to.not.have.property('requests');
     });
 
     it('WHEN an entry of requests is invalid THEN expect error naming config.requests', () => {
@@ -757,6 +941,14 @@ describe('validateConfig()', () => {
         it(`WHEN config ${title} has an unknown key THEN expect error naming the key`, () => {
             expectInvalid(config, 'config has unknown keys request');
         });
+    });
+
+    it('WHEN debug is not a boolean THEN expect error naming config.debug', () => {
+        expectInvalid({ debug: 'yes' }, 'config.debug');
+    });
+
+    it('WHEN debug is a boolean THEN expect no error', () => {
+        chai.expect(() => validateConfig({ debug: true })).to.not.throw();
     });
 
     it('WHEN ignoreRequests is undefined THEN expect no error', () => {

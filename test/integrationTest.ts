@@ -24,10 +24,16 @@ const specs = readdirSync('cypress/e2e').filter((file) =>
 const errorChecks: Record<string, (error: string) => void> = {
     'shouldFailOnRequestError > should fail on an XHR without a response': (
         error
-    ) => expect(error).to.match(/"error":"/),
+    ) => expect(error).to.match(/^GET http:\/\/\S+\/xhr\?status=none → \S/m),
     'shouldFailOnRequestError > should fail on a fetch without a response': (
         error
-    ) => expect(error).to.match(/"error":"/),
+    ) => expect(error).to.match(/^GET http:\/\/\S+\/xhr\?status=none → \S/m),
+    // one line per failing request, without internal fields
+    'shouldFailOnNetworkRequest > should fail on an XHR that matches no entry':
+        (error) =>
+            expect(error).to.match(
+                /^AssertionError: cypress-fail-on-network-error:\nGET http:\/\/localhost:\d+\/xhr\?status=200 → 200(\n|$)/
+            ),
     'shouldNormalizeAndValidateConfig > should fail when an entry has an unknown key':
         (error) =>
             expect(error).to.match(

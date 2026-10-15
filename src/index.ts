@@ -6,6 +6,8 @@ export type Config = {
     ignoreRequests?: (string | RequestMatcher | RequestPredicate)[];
     /** @deprecated Use `ignoreRequests`. When both are set, `requests` wins. */
     requests?: (string | RequestMatcher | RequestPredicate)[];
+    // also log each ignored request, with the entry that ignored it
+    debug?: boolean;
 };
 
 // the common methods, for autocompletion; any other method works too
@@ -55,6 +57,7 @@ export type NormalizedConfig = {
     ignoreRequests: NormalizedRequest[];
     /** @deprecated Use `ignoreRequests`, which this reads and sets. */
     requests: NormalizedRequest[];
+    debug: boolean;
 };
 
 // the active call's marker, stored on the Cypress object under a global
@@ -66,8 +69,9 @@ export default function failOnNetworkError(_config: Config = {}) {
     let config: NormalizedConfig;
     let originConfig: NormalizedConfig;
     let requests: RequestSession[] = [];
-    // set when a request matched no entry, until the next command:end throws
-    let requestFailed = false;
+    // requests checked since the last command:end, which logs them and throws
+    // for those that matched no entry; ignored ones only with debug
+    let checkedRequests: CheckedRequest[] = [];
     // set when a predicate threw, until the next command:end throws
     let predicateError: Error | undefined;
 
@@ -167,7 +171,14 @@ export default function failOnNetworkError(_config: Config = {}) {
             event.requestId
         ) as RequestSession;
         try {
-            if (!isRequestExcluded(request, getConfig())) requestFailed = true;
+            const entries = getConfig().ignoreRequests;
+            const ignoredBy = findIgnoringEntry(request, getConfig());
+            if (ignoredBy === undefined || getConfig().debug)
+                checkedRequests.push({
+                    request,
+                    ignoredBy,
+                    entries: [...entries],
+                });
         } catch (error) {
             // a broken predicate is a mistake in the config, not a failed check
             predicateError = invalid(
@@ -181,14 +192,20 @@ export default function failOnNetworkError(_config: Config = {}) {
     // can hide. command:end runs inside the queue and fails the command.
     Cypress.on('command:end', () => {
         if (!isActive()) return;
+        const checked = checkedRequests;
+        checkedRequests = [];
+        checked.forEach(logCheckedRequest);
+
         if (predicateError !== undefined) {
             const error = predicateError;
             predicateError = undefined;
             throw error;
         }
-        if (!requestFailed) return;
-        requestFailed = false;
-        throw new AssertionError(`${prefix}\n${JSON.stringify(requests)}`);
+        const failed = checked.filter(({ ignoredBy }) => !ignoredBy);
+        if (failed.length === 0) return;
+        throw new AssertionError(
+            `${prefix}\n${failed.map(({ request }) => requestToString(request)).join('\n')}`
+        );
     });
 
     // Electron and Firefox send no event for a request that the browser
@@ -207,7 +224,7 @@ export default function failOnNetworkError(_config: Config = {}) {
         if (!isActive()) return;
         setConfig(originConfig);
         requests = [];
-        requestFailed = false;
+        checkedRequests = [];
         predicateError = undefined;
     });
 
@@ -219,7 +236,7 @@ export default function failOnNetworkError(_config: Config = {}) {
 }
 
 // requests is the deprecated name of ignoreRequests
-const configKeys = ['ignoreRequests', 'requests'];
+const configKeys = ['ignoreRequests', 'requests', 'debug'];
 const requestKeys = ['url', 'method', 'status', 'predicate'];
 
 // a broken config is not a failed check, so it throws an Error, not an AssertionError
@@ -246,11 +263,16 @@ export const validateConfig = (config: Config): void => {
     );
     if (unknownConfigKeys.length > 0)
         throw invalid(
-            `config has unknown keys ${unknownConfigKeys.join(', ')}, use ignoreRequests`
+            `config has unknown keys ${unknownConfigKeys.join(', ')}, use ignoreRequests or debug`
         );
     // errors name the key the user passed
     validateRequests(config.ignoreRequests, 'config.ignoreRequests');
     validateRequests(config.requests, 'config.requests');
+    expectType(
+        config.debug,
+        ['boolean', 'undefined'],
+        'config.debug must be a boolean'
+    );
 };
 
 const validateRequests = (requests: unknown, key: string): void => {
@@ -363,6 +385,7 @@ export const createConfig = (config: Config): NormalizedConfig => {
     const requests = config.requests ?? config.ignoreRequests;
     const normalized = {
         ignoreRequests: requests !== undefined ? mapToRequests(requests) : [],
+        debug: config.debug ?? false,
     } as NormalizedConfig;
     // getConfig().requests keeps working, and { ...getConfig() } skips it
     Object.defineProperty(normalized, 'requests', {
@@ -439,8 +462,14 @@ export const findRequest = (
 export const isRequestExcluded = (
     request: RequestSession,
     config: NormalizedConfig
-): boolean => {
-    return config.ignoreRequests.some((configRequest: NormalizedRequest) => {
+): boolean => findIgnoringEntry(request, config) !== undefined;
+
+// the first entry that matches the request
+export const findIgnoringEntry = (
+    request: RequestSession,
+    config: NormalizedConfig
+): NormalizedRequest | undefined =>
+    config.ignoreRequests.find((configRequest: NormalizedRequest) => {
         const urlMatch = configRequest.url
             ? new RegExp(configRequest.url).test(request.url)
             : true;
@@ -461,6 +490,74 @@ export const isRequestExcluded = (
         return configRequest.predicate
             ? Boolean(configRequest.predicate({ ...request }))
             : true;
+    });
+
+// one line of the failure message and of the command log
+export const requestToString = (request: RequestSession): string =>
+    `${request.method} ${request.url} → ${request.status ?? request.error}`;
+
+const quote = (text: string): string => `'${text.replace(/[\\']/g, '\\$&')}'`;
+
+// an entry in the shape of the config, without the fields it does not set
+export const entryToString = (entry: NormalizedRequest): string => {
+    const fields: string[] = [];
+    if (entry.url)
+        fields.push(
+            `url: ${typeof entry.url === 'string' ? quote(entry.url) : String(entry.url)}`
+        );
+    if (entry.method)
+        fields.push(
+            `method: ${Array.isArray(entry.method) ? `[${entry.method.map(quote).join(', ')}]` : quote(entry.method)}`
+        );
+    if (entry.status)
+        fields.push(
+            `status: ${entry.status.from === entry.status.to ? entry.status.from : `{ from: ${entry.status.from}, to: ${entry.status.to} }`}`
+        );
+    if (entry.predicate)
+        fields.push(`predicate: ${entry.predicate.name || 'function'}`);
+    return `{ ${fields.join(', ')} }`;
+};
+
+// the reporter renders Cypress.log messages as Markdown, which would format
+// characters like * and _ in URLs
+export const escapeMarkdown = (text: string): string =>
+    text.replace(/[\\`*_~[\]()<>&]/g, '\\$&');
+
+const requestConsoleProps = (request: RequestSession) =>
+    request.error === undefined
+        ? {
+              Request: `${request.method} ${request.url}`,
+              Status: request.status,
+          }
+        : { Request: `${request.method} ${request.url}`, Error: request.error };
+
+// logs a failing request, or with debug an ignored one and the entry that
+// ignored it; clicking the entry prints the details to the browser console
+const logCheckedRequest = ({ request, ignoredBy, entries }: CheckedRequest) => {
+    if (ignoredBy === undefined) {
+        Cypress.log({
+            name: 'unexpected',
+            displayName: 'unexpected',
+            message: escapeMarkdown(requestToString(request)),
+            consoleProps: () => ({
+                ...requestConsoleProps(request),
+                'Entries tried': entries,
+            }),
+        });
+        return;
+    }
+    Cypress.log({
+        name: 'ignored',
+        displayName: 'ignored',
+        message: `**${escapeMarkdown(entryToString(ignoredBy))}** matched ${escapeMarkdown(requestToString(request))}`,
+        consoleProps: () => ({
+            ...requestConsoleProps(request),
+            'Ignored by': ignoredBy,
+            // a url string is matched as a regular expression
+            ...(typeof ignoredBy.url === 'string'
+                ? { 'As RegExp': new RegExp(ignoredBy.url) }
+                : {}),
+        }),
     });
 };
 
@@ -486,6 +583,14 @@ const waitUntil = (predicate: () => boolean, timeout: number) => {
     return new Cypress.Promise<void>((resolve) =>
         setTimeout(() => poll(resolve), Math.min(interval, timeout))
     );
+};
+
+// a request that got a response or failed, with the entries it was matched
+// against and the first one that matched it
+type CheckedRequest = {
+    request: RequestSession;
+    ignoredBy: NormalizedRequest | undefined;
+    entries: NormalizedRequest[];
 };
 
 export type RequestSession = {

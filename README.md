@@ -31,15 +31,16 @@ Call it once. A later call, for example in a spec or a `beforeEach`, replaces th
 
 Every XHR and `fetch` request is checked, whatever its status, so without the entry above a `200` fails the test too. Page loads from `cy.visit()` and scripts, stylesheets and images are not checked. Neither are requests that the browser cancels, because the page aborted them (`AbortController`, `xhr.abort()`) or navigated away.
 
-When a request gets a response, or fails without one, and no entry in `ignoreRequests` matches it, the test fails with an error that starts with `cypress-fail-on-network-error:` and lists the requests of the current test:
+When a request gets a response, or fails without one, and no entry in `ignoreRequests` matches it, the test fails at the end of the current command. The error starts with `cypress-fail-on-network-error:` and lists each such request on a line of its own, such as `GET http://localhost:3000/api/cart → 500`, or the error instead of the status for a request without a response. Each one is also logged to the command log as `unexpected`:
 
-![A failed request in the Cypress command log and the failed test's error](./docs/commandLog.png)
+![An unexpected request in the Cypress command log and the failed test's error](./docs/commandLog.png)
 
 ## Config (optional)
 
 | Option           | Default | Description |
 | ---------------- | ------- | ----------- |
 | `ignoreRequests` | `[]`    | Requests that don't fail a test, as `string` (shorthand for `{ url }`), `{ url, method, status, predicate }`, or a function (shorthand for `{ predicate }`). A request that matches any entry is excluded. `requests`, its old name, still works. |
+| `debug` | `false` | Also logs each request that `ignoreRequests` ignores, with the entry that matched it. See [Debugging](#debugging). |
 
 ```ts
 import failOnNetworkError, { Config } from 'cypress-fail-on-network-error';
@@ -115,6 +116,21 @@ it('should check every request the page makes', () => {
 `waitForRequests(timeout = 10000)` waits until every request of the current test has a response or has failed. It checks every 500 ms, starting 500 ms after the command runs, so it also sees requests the page has just made. When the timeout passes first, the test continues without an error.
 
 It does not wait for requests that were pending when the page unloaded, such as after `cy.visit()` to another page; a response that still arrives is checked. Electron and Firefox report nothing for a request that the page aborts, so `waitForRequests` waits for it until the timeout.
+
+## Debugging
+
+Click an `unexpected` entry in the command log to print the request, its status or error, and the `ignoreRequests` entries it was matched against to the browser console.
+
+Set `debug: true` to also log each ignored request, with the entry that matched it:
+
+```ts
+failOnNetworkError({
+    ignoreRequests: [{ status: { from: 200, to: 399 } }],
+    debug: true,
+});
+```
+
+![An ignored request and an unexpected one in the Cypress command log](./docs/debugTrue.png)
 
 ## Contributing
 
