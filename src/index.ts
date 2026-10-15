@@ -1,5 +1,4 @@
 import { AssertionError } from 'chai';
-import typeDetect from 'type-detect';
 
 const prefix = 'cypress-fail-on-network-error:';
 
@@ -165,9 +164,17 @@ const requestKeys = ['url', 'method', 'status'];
 // a broken config is not a failed check, so it throws an Error, not an AssertionError
 const invalid = (message: string) => new Error(`${prefix} ${message}`);
 
+// the type name for messages, like type-detect: null, a primitive's typeof,
+// or the built-in class of an object (Object, Array, RegExp, Date)
+const typeName = (value: unknown): string => {
+    if (value === null) return 'null';
+    if (typeof value !== 'object') return typeof value;
+    return Object.prototype.toString.call(value).slice(8, -1);
+};
+
 const expectType = (value: unknown, types: string[], message: string) => {
-    if (types.indexOf(typeDetect(value)) === -1)
-        throw invalid(`${message}, got ${typeDetect(value)}`);
+    if (types.indexOf(typeName(value)) === -1)
+        throw invalid(`${message}, got ${typeName(value)}`);
 };
 
 export const validateConfig = (config: Config): void => {
@@ -221,7 +228,7 @@ export const validateConfig = (config: Config): void => {
         );
         // new RegExp('') and /(?:)/ match every URL, like an empty url string
         if (
-            typeDetect(request.url) === 'RegExp' &&
+            typeName(request.url) === 'RegExp' &&
             (request.url as RegExp).source === '(?:)'
         )
             throw invalid(
@@ -246,7 +253,7 @@ export const validateConfig = (config: Config): void => {
             ['Object', 'number', 'undefined'],
             `${name}.status must be a number or a { from, to } range`
         );
-        if (typeDetect(request.status) === 'Object') {
+        if (typeName(request.status) === 'Object') {
             const status = request.status as Record<string, unknown>;
             expectType(
                 status.from,
