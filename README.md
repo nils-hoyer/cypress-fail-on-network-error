@@ -23,27 +23,27 @@ import failOnNetworkError from 'cypress-fail-on-network-error';
 
 failOnNetworkError({
     // don't fail on successful responses
-    requests: [{ status: { from: 200, to: 399 } }],
+    ignoreRequests: [{ status: { from: 200, to: 399 } }],
 });
 ```
 
 Every XHR and `fetch` request is checked, whatever its status, so without the entry above a `200` fails the test too. Page loads from `cy.visit()` and scripts, stylesheets and images are not checked. Neither are requests that the browser cancels, because the page aborted them (`AbortController`, `xhr.abort()`) or navigated away.
 
-When a request gets a response, or fails without one, and no entry in `requests` matches it, the test fails with an error that starts with `cypress-fail-on-network-error:` and lists the requests of the current test:
+When a request gets a response, or fails without one, and no entry in `ignoreRequests` matches it, the test fails with an error that starts with `cypress-fail-on-network-error:` and lists the requests of the current test:
 
 ![A failed request in the Cypress command log and the failed test's error](./docs/commandLog.png)
 
 ## Config (optional)
 
-| Option     | Default | Description                                                                                                                                  |
-| ---------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `requests` | `[]`    | Requests that don't fail a test, as `string` (shorthand for `{ url }`) or `{ url, method, status }`. A request that matches any entry is excluded. |
+| Option           | Default | Description |
+| ---------------- | ------- | ----------- |
+| `ignoreRequests` | `[]`    | Requests that don't fail a test, as `string` (shorthand for `{ url }`) or `{ url, method, status }`. A request that matches any entry is excluded. `requests`, its old name, still works. |
 
 ```ts
 import failOnNetworkError, { Config } from 'cypress-fail-on-network-error';
 
 const config: Config = {
-    requests: [
+    ignoreRequests: [
         { status: { from: 200, to: 399 } },
         'analytics', // any request whose URL contains "analytics"
         { url: /\/api\/feature-flags/, method: 'GET', status: 404 },
@@ -69,16 +69,16 @@ failOnNetworkError(config);
 ```ts
 const { getConfig, setConfig } = failOnNetworkError(config);
 
-Cypress.Commands.add('setConfigRequests', (requests) =>
-    setConfig({ ...getConfig(), requests })
+Cypress.Commands.add('setIgnoredRequests', (ignoreRequests) =>
+    setConfig({ ...getConfig(), ignoreRequests })
 );
 ```
 
-Then use it in a test. Changes last until the end of the test. The command replaces `requests`, so include the entries you still need:
+Then use it in a test. Changes last until the end of the test. The command replaces `ignoreRequests`, so include the entries you still need:
 
 ```ts
 it('should tolerate an unavailable recommendations service', () => {
-    cy.setConfigRequests([
+    cy.setIgnoredRequests([
         { status: { from: 200, to: 399 } },
         { url: /\/api\/recommendations/, status: 503 },
     ]);
