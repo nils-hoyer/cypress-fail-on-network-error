@@ -4,6 +4,7 @@ import { readFileSync } from 'fs';
 import failOnNetworkError, {
     type Config,
     type Request,
+    type RequestMatcher,
     type RequestSession,
     createConfig,
     isRequestExcluded,
@@ -422,6 +423,16 @@ describe('test:after:run handler', () => {
     });
 });
 
+describe('types', () => {
+    it('WHEN an entry is typed with the deprecated Request alias THEN expect it to compile as a RequestMatcher', () => {
+        const entry: Request = { url: 'foo', method: 'GET', status: 500 };
+        const matcher: RequestMatcher = entry;
+        const config: Config = { requests: [entry, matcher] };
+
+        chai.expect(() => validateConfig(config)).to.not.throw();
+    });
+});
+
 describe('getConfig()', () => {
     // the plugin matches against normalized entries, where a string would
     // exclude every request and a numeric status none
@@ -438,7 +449,7 @@ describe('getConfig()', () => {
         const { getConfig } = failOnNetworkError({
             requests: [
                 'foo',
-                { method: 'get', status: 500 } as unknown as Request,
+                { method: 'get', status: 500 } as unknown as RequestMatcher,
             ],
         });
 
@@ -632,13 +643,13 @@ describe('validateConfig()', () => {
 });
 
 describe('mapToRequests()', () => {
-    it('WHEN mapToRequests is called THEN expect Request object array', () => {
+    it('WHEN mapToRequests is called THEN expect normalized entries', () => {
         const requests = [
             'url1',
             { url: 'url2', status: 400, method: 'GET' },
             { method: 'GET' },
             { status: { from: 200, to: 399 } },
-        ] as (string | Request)[];
+        ] as (string | RequestMatcher)[];
 
         const mappedRequests = mapToRequests(requests);
         chai.expect(mappedRequests).to.deep.equal([
@@ -654,7 +665,7 @@ describe('mapToRequests()', () => {
     });
     it('WHEN method is lower case THEN expect it upper-cased', () => {
         chai.expect(
-            mapToRequests([{ method: 'get' } as unknown as Request])
+            mapToRequests([{ method: 'get' } as unknown as RequestMatcher])
         ).to.deep.equal([{ url: undefined, status: undefined, method: 'GET' }]);
     });
     it('WHEN status range is reversed THEN expect from and to swapped', () => {
