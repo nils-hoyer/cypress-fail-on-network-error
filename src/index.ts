@@ -57,6 +57,11 @@ export type NormalizedConfig = {
     requests: NormalizedRequest[];
 };
 
+// the active call's marker, stored on the Cypress object under a global
+// symbol, because the support file and a spec can be separate bundles, each
+// with its own copy of this module
+const activeInstanceKey = Symbol.for('cypress-fail-on-network-error');
+
 export default function failOnNetworkError(_config: Config = {}) {
     let config: NormalizedConfig;
     let originConfig: NormalizedConfig;
@@ -96,7 +101,19 @@ export default function failOnNetworkError(_config: Config = {}) {
 
     setConfig(_config);
 
+    // a later call replaces this one, so a call in beforeEach or in a spec
+    // does not add another set of listeners that checks every request too
+    const instance = {};
+    const cypress = Cypress as unknown as Record<symbol, object | undefined>;
+    if (cypress[activeInstanceKey] !== undefined)
+        console.warn(
+            `${prefix} failOnNetworkError() was called more than once, so only the latest call checks requests. Call it once, in the support file.`
+        );
+    cypress[activeInstanceKey] = instance;
+    const isActive = () => cypress[activeInstanceKey] === instance;
+
     Cypress.on('request:event', (eventName, event) => {
+        if (!isActive()) return;
         if (eventName === 'incoming:request') {
             // check only XHR and fetch, like Cypress's command log; a request
             // without a resource type is checked as before
@@ -163,6 +180,7 @@ export default function failOnNetworkError(_config: Config = {}) {
     // a thrown error is an uncaught exception that uncaught:exception handlers
     // can hide. command:end runs inside the queue and fails the command.
     Cypress.on('command:end', () => {
+        if (!isActive()) return;
         if (predicateError !== undefined) {
             const error = predicateError;
             predicateError = undefined;
@@ -177,6 +195,7 @@ export default function failOnNetworkError(_config: Config = {}) {
     // cancels when the page unloads, so waitForRequests would wait for it
     // until its timeout. A response that still arrives is checked.
     Cypress.on('window:unload', () => {
+        if (!isActive()) return;
         requests = requests.map((request: RequestSession) =>
             request.status === undefined && request.error === undefined
                 ? { ...request, cancelled: true }
@@ -185,6 +204,7 @@ export default function failOnNetworkError(_config: Config = {}) {
     });
 
     Cypress.on('test:after:run', () => {
+        if (!isActive()) return;
         setConfig(originConfig);
         requests = [];
         requestFailed = false;

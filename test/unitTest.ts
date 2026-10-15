@@ -135,6 +135,71 @@ describe('dist/index.js', () => {
     });
 });
 
+describe('failOnNetworkError() called more than once', () => {
+    let warnings: unknown[][];
+    const warn = console.warn;
+
+    beforeEach(() => {
+        warnings = [];
+        console.warn = (...args: unknown[]) => {
+            warnings.push(args);
+        };
+    });
+
+    afterEach(() => {
+        console.warn = warn;
+    });
+
+    it('WHEN called once THEN expect no warning', () => {
+        failOnNetworkError();
+
+        chai.expect(warnings).to.be.empty;
+    });
+
+    it('WHEN called twice THEN expect a warning with the prefix', () => {
+        failOnNetworkError();
+        failOnNetworkError();
+
+        chai.expect(warnings).to.have.length(1);
+        chai.expect(String(warnings[0][0])).to.match(
+            /^cypress-fail-on-network-error: failOnNetworkError\(\) was called more than once/
+        );
+    });
+
+    it('WHEN only the earlier call excludes a request THEN expect assertion error at command:end', () => {
+        failOnNetworkError({ ignoreRequests: ['foo'] });
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 500);
+
+        chai.expect(commandEnd).to.throw(AssertionError);
+    });
+
+    it('WHEN only the latest call excludes a request THEN expect no error', () => {
+        failOnNetworkError();
+        failOnNetworkError({ ignoreRequests: ['foo'] });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 500);
+
+        chai.expect(commandEnd).to.not.throw();
+    });
+
+    it('WHEN the latest call has an invalid config THEN expect the earlier call to stay active', () => {
+        failOnNetworkError();
+        chai.expect(() =>
+            failOnNetworkError({ ignoreRequests: [42] } as unknown as Config)
+        ).to.throw(Error);
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 500);
+
+        chai.expect(commandEnd).to.throw(AssertionError);
+        chai.expect(warnings).to.be.empty;
+    });
+});
+
 describe('request:event handler', () => {
     // the plugin fails the test from command:end, inside Cypress's command
     // queue; an error thrown in request:event would be an uncaught exception
