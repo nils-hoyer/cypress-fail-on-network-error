@@ -3,7 +3,7 @@ Cypress.on('uncaught:exception', () => false);
 
 describe('shouldFailDespiteUncaughtExceptionHandler', () => {
     it('should fail on a 500 response although uncaught exceptions are ignored', () => {
-        cy.setConfigRequests([]);
+        cy.setIgnoredRequests([]);
         cy.visit('/');
         cy.fetch('/xhr?status=500');
         cy.waitForRequests();

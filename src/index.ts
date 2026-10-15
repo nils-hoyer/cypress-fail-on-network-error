@@ -60,6 +60,28 @@ export type NormalizedConfig = {
     debug: boolean;
 };
 
+// an entry of ignoreRequests as the config accepts it
+type IgnoredRequest = string | RequestMatcher | RequestPredicate;
+
+declare global {
+    namespace Cypress {
+        // registered by addIgnoredRequestsCommands()
+        interface Chainable {
+            getIgnoredRequests(): Chainable<NormalizedRequest[]>;
+            setIgnoredRequests(
+                ignoreRequests: IgnoredRequest[]
+            ): Chainable<void>;
+            addIgnoredRequests(
+                ignoreRequests: IgnoredRequest[]
+            ): Chainable<void>;
+            deleteIgnoredRequests(
+                ignoreRequests: IgnoredRequest[]
+            ): Chainable<void>;
+            waitForRequests(timeout?: number): Chainable<void>;
+        }
+    }
+}
+
 // the active call's marker, stored on the Cypress object under a global
 // symbol, because the support file and a spec can be separate bundles, each
 // with its own copy of this module
@@ -234,6 +256,41 @@ export default function failOnNetworkError(_config: Config = {}) {
         waitForRequests,
     };
 }
+
+/**
+ * Registers the commands getIgnoredRequests, setIgnoredRequests,
+ * addIgnoredRequests and deleteIgnoredRequests, which read and change
+ * ignoreRequests for the current test, and waitForRequests.
+ */
+export const addIgnoredRequestsCommands = ({
+    getConfig,
+    setConfig,
+    waitForRequests,
+}: ReturnType<typeof failOnNetworkError>): void => {
+    const setIgnoredRequests = (ignoreRequests: IgnoredRequest[]) =>
+        setConfig({ ...getConfig(), ignoreRequests });
+
+    Cypress.Commands.addAll({
+        getIgnoredRequests: () =>
+            cy.wrap(getConfig().ignoreRequests, { log: false }),
+        setIgnoredRequests,
+        addIgnoredRequests: (ignoreRequests: IgnoredRequest[]) =>
+            setIgnoredRequests([
+                ...getConfig().ignoreRequests,
+                ...ignoreRequests,
+            ]),
+        deleteIgnoredRequests: (ignoreRequests: IgnoredRequest[]) => {
+            validateConfig({ ignoreRequests });
+            const deleted = mapToRequests(ignoreRequests);
+            setIgnoredRequests(
+                getConfig().ignoreRequests.filter(
+                    (entry) => !deleted.some((each) => isSameEntry(entry, each))
+                )
+            );
+        },
+        waitForRequests: (timeout?: number) => waitForRequests(timeout),
+    });
+};
 
 // requests is the deprecated name of ignoreRequests
 const configKeys = ['ignoreRequests', 'requests', 'debug'];
@@ -517,6 +574,16 @@ export const entryToString = (entry: NormalizedRequest): string => {
         fields.push(`predicate: ${entry.predicate.name || 'function'}`);
     return `{ ${fields.join(', ')} }`;
 };
+
+// normalized entries that match the same requests: a string and a RegExp
+// with the same text differ, and predicates must be the same function
+export const isSameEntry = (
+    a: NormalizedRequest,
+    b: NormalizedRequest
+): boolean =>
+    a.predicate === b.predicate &&
+    entryToString({ ...a, predicate: undefined }) ===
+        entryToString({ ...b, predicate: undefined });
 
 // the reporter renders Cypress.log messages as Markdown, which would format
 // characters like * and _ in URLs
