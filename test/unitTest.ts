@@ -1,11 +1,14 @@
 import * as chai from 'chai';
 import { AssertionError } from 'chai';
 import { readFileSync } from 'fs';
+import * as index from './../dist/index.js';
 import failOnNetworkError, {
     addIgnoredRequestsCommands,
     type Config,
     type RequestMatcher,
     type RequestSession,
+} from './../dist/index.js';
+import {
     createConfig,
     entryToString,
     escapeMarkdown,
@@ -13,7 +16,7 @@ import failOnNetworkError, {
     isSameEntry,
     mapToRequests,
     validateConfig,
-} from './../dist/index.js';
+} from './../dist/internal.js';
 
 type Listener = (...args: any[]) => unknown;
 let listeners: Record<string, Listener[]> = {};
@@ -152,14 +155,28 @@ describe('failOnNetworkError()', () => {
 });
 
 describe('dist/index.js', () => {
-    // the plugin is bundled into every user's support file
-    it('WHEN the plugin is built THEN expect it to import only chai', () => {
-        const source = readFileSync('dist/index.js', 'utf8');
-        const imports = [
-            ...source.matchAll(/^import .* from '([^']+)';$/gm),
+    const importsOf = (file: string) =>
+        [
+            ...readFileSync(file, 'utf8').matchAll(
+                /^import [^;]* from '([^']+)';$/gm
+            ),
         ].map((match) => match[1]);
 
-        chai.expect(imports).to.deep.equal(['chai']);
+    // the plugin is bundled into every user's support file
+    it('WHEN the plugin is built THEN expect it to import only chai and its helpers', () => {
+        chai.expect(importsOf('dist/index.js')).to.deep.equal([
+            'chai',
+            './internal.js',
+        ]);
+        chai.expect(importsOf('dist/internal.js')).to.deep.equal([]);
+    });
+
+    // the helpers are in dist/internal.js, which the exports map does not list
+    it('WHEN the plugin is imported THEN expect it to export only the public API', () => {
+        chai.expect(Object.keys(index).sort()).to.deep.equal([
+            'addIgnoredRequestsCommands',
+            'default',
+        ]);
     });
 });
 
