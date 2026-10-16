@@ -146,15 +146,6 @@ const validateRequests = (requests: unknown, key: string): void => {
             throw invalid(
                 `${name}.url must not be an empty RegExp, or it matches every request`
             );
-        if (typeof request.url === 'string') {
-            try {
-                new RegExp(request.url);
-            } catch (error) {
-                throw invalid(
-                    `${name}.url is not a valid regular expression: ${(error as Error).message}`
-                );
-            }
-        }
         expectType(
             request.predicate,
             ['function', 'undefined'],
@@ -287,7 +278,7 @@ export const findIgnoringEntry = (
 ): NormalizedRequest | undefined =>
     config.ignoreRequests.find((configRequest: NormalizedRequest) => {
         const urlMatch = configRequest.url
-            ? new RegExp(configRequest.url).test(request.url)
+            ? isUrlMatch(configRequest.url, request.url)
             : true;
         const statusMatch = configRequest.status
             ? request.status !== undefined &&
@@ -307,6 +298,28 @@ export const findIgnoringEntry = (
             ? Boolean(configRequest.predicate({ ...request }))
             : true;
     });
+
+// a string matches like a URL in cy.intercept(): when the URL contains it, or
+// as a glob against the full URL or its path and query
+const isUrlMatch = (url: string | RegExp, requestUrl: string): boolean => {
+    // a copy, so a /g RegExp starts at lastIndex 0
+    if (typeof url !== 'string') return new RegExp(url).test(requestUrl);
+    if (requestUrl.indexOf(url) !== -1) return true;
+    const options = { matchBase: true };
+    return (
+        Cypress.minimatch(requestUrl, url, options) ||
+        Cypress.minimatch(pathOf(requestUrl), url, options)
+    );
+};
+
+const pathOf = (url: string): string => {
+    try {
+        const { pathname, search } = new URL(url);
+        return pathname + search;
+    } catch (error) {
+        return url;
+    }
+};
 
 // one line of the failure message and of the command log
 export const requestToString = (request: RequestSession): string =>
@@ -383,10 +396,6 @@ export const logCheckedRequest = ({
         consoleProps: () => ({
             ...requestConsoleProps(request),
             'Ignored by': ignoredBy,
-            // a url string is matched as a regular expression
-            ...(typeof ignoredBy.url === 'string'
-                ? { 'As RegExp': new RegExp(ignoredBy.url) }
-                : {}),
         }),
     });
 };

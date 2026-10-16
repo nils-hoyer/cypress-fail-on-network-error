@@ -50,6 +50,11 @@ const errorChecks: Record<string, (error: string) => void> = {
     'shouldFailOnlyOnErrorsByDefault > should fail on a 5xx response': (
         error
     ) => expect(error).to.match(/^GET http:\/\/\S+\/xhr\?status=500 → 500$/m),
+    'shouldMatchUrlStrings > should fail on a request that the string matches only as a regular expression':
+        (error) =>
+            expect(error).to.match(
+                /^GET http:\/\/\S+\/xhr\?status=500 → 500$/m
+            ),
     'shouldMatchPredicates > should fail with an Error when a predicate throws':
         (error) =>
             expect(error).to.match(

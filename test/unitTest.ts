@@ -1,6 +1,7 @@
 import * as chai from 'chai';
 import { AssertionError } from 'chai';
 import { readFileSync } from 'fs';
+import { minimatch } from 'minimatch';
 import * as index from './../dist/index.js';
 import failOnNetworkError, {
     addIgnoredRequestsCommands,
@@ -115,6 +116,7 @@ beforeEach(() => {
             (listeners[eventName] ??= []).push(listener);
         },
         Promise,
+        minimatch,
         log: (options: LogOptions) => {
             logs.push(options);
         },
@@ -620,7 +622,6 @@ describe('failure message and command log', () => {
             Request: 'GET http://foo',
             Status: 200,
             'Ignored by': mapToRequests([{ url: 'foo', status: 200 }])[0],
-            'As RegExp': /foo/,
         });
     });
 
@@ -1281,12 +1282,12 @@ describe('validateConfig()', () => {
         ).to.not.throw();
     });
 
+    // a string is no longer a regular expression
     ['(', { url: '[a-' }].forEach((entry) => {
-        it(`WHEN url ${JSON.stringify(entry)} is not a valid regular expression THEN expect error naming the entry`, () => {
-            expectInvalid(
-                { ignoreRequests: ['foo', entry] },
-                'config.ignoreRequests[1]'
-            );
+        it(`WHEN url ${JSON.stringify(entry)} is not a valid regular expression THEN expect no error`, () => {
+            chai.expect(() =>
+                validateConfig({ ignoreRequests: ['foo', entry] })
+            ).to.not.throw();
         });
     });
 
@@ -1521,6 +1522,65 @@ describe('isRequestExcluded()', () => {
                 status: 500,
             };
             chai.expect(isRequestExcluded(request, config)).to.equal(expected);
+        });
+    });
+
+    describe('WHEN entry has a url', () => {
+        [
+            // the URL contains the string
+            ['foo', 'http://foo', true],
+            ['/api/users', 'http://localhost/api/users?page=2', true],
+            ['analytics', 'http://cdn.example.com/analytics.js', true],
+            ['/api/users?page=1', 'http://localhost/api/users?page=1', true],
+            ['bar', 'http://foo', false],
+            // a glob that matches the full URL, or its file name
+            ['http://localhost/api/*', 'http://localhost/api/users', true],
+            ['**/*.map', 'http://localhost/js/app.js.map', true],
+            ['*.map', 'http://localhost/js/app.js.map', true],
+            ['*.map', 'http://localhost/js/app.js', false],
+            // a glob that matches the path and query, as in cy.intercept()
+            ['/api/*/users', 'http://localhost/api/1/users', true],
+            ['/api/*/users', 'http://localhost/api/1/2/users', false],
+            ['/api/*/users', 'http://localhost/api/1/users?page=2', false],
+            // regular expression syntax in a string is not special
+            ['foo.bar', 'http://fooxbar', false],
+            ['^http://foo', 'http://foo', false],
+            ['foo|bar', 'http://bar', false],
+        ].forEach(([url, requestUrl, expected]) => {
+            it(`WHEN url is '${url}' and request url is ${requestUrl} THEN expect ${expected}`, () => {
+                const config = createConfig({
+                    ignoreRequests: [url as string],
+                });
+                const request: RequestSession = {
+                    requestId: '1',
+                    method: 'GET',
+                    url: requestUrl as string,
+                    status: 500,
+                };
+                chai.expect(isRequestExcluded(request, config)).to.equal(
+                    expected
+                );
+            });
+        });
+
+        [
+            [/fo+\b/, 'http://foo', true],
+            [/^http:\/\/bar/, 'http://foo/bar', false],
+        ].forEach(([url, requestUrl, expected]) => {
+            it(`WHEN url is ${url} and request url is ${requestUrl} THEN expect ${expected}`, () => {
+                const config = createConfig({
+                    ignoreRequests: [{ url: url as RegExp }],
+                });
+                const request: RequestSession = {
+                    requestId: '1',
+                    method: 'GET',
+                    url: requestUrl as string,
+                    status: 500,
+                };
+                chai.expect(isRequestExcluded(request, config)).to.equal(
+                    expected
+                );
+            });
         });
     });
 
