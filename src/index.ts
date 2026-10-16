@@ -1,4 +1,3 @@
-import { AssertionError } from 'chai';
 import {
     createConfig,
     findIgnoringEntry,
@@ -31,6 +30,12 @@ export type {
     RequestPredicate,
     RequestSession,
 } from './internal.js';
+
+// a request failed the test, like a failed assertion. Named like chai's
+// AssertionError, so Cypress shows failures as before 2.0.
+class AssertionError extends Error {
+    name = 'AssertionError';
+}
 
 declare global {
     namespace Cypress {
