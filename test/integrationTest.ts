@@ -39,6 +39,11 @@ const errorChecks: Record<string, (error: string) => void> = {
             expect(error).to.match(
                 /^Error: cypress-fail-on-network-error: config\.ignoreRequests\[0\] has unknown keys/
             ),
+    'shouldNormalizeAndValidateConfig > should fail when the config sets the removed requests option':
+        (error) =>
+            expect(error).to.match(
+                /^Error: cypress-fail-on-network-error: config\.requests was renamed to ignoreRequests/
+            ),
     'shouldMatchPredicates > should fail with an Error when a predicate throws':
         (error) =>
             expect(error).to.match(

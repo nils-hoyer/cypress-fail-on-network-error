@@ -4,7 +4,6 @@ import { readFileSync } from 'fs';
 import failOnNetworkError, {
     addIgnoredRequestsCommands,
     type Config,
-    type Request,
     type RequestMatcher,
     type RequestSession,
     createConfig,
@@ -923,13 +922,6 @@ describe('test:after:run handler', () => {
 });
 
 describe('types', () => {
-    it('WHEN an entry is typed with the deprecated Request alias THEN expect it to compile as a RequestMatcher', () => {
-        const entry: Request = { url: 'foo', method: 'GET', status: 500 };
-        const matcher: RequestMatcher = entry;
-        const config: Config = { ignoreRequests: [entry, matcher] };
-
-        chai.expect(() => validateConfig(config)).to.not.throw();
-    });
     it('WHEN an entry is a function or sets predicate THEN expect it to compile', () => {
         const config: Config = {
             ignoreRequests: [
@@ -992,75 +984,37 @@ describe('getConfig()', () => {
     });
 });
 
-describe('deprecated requests option', () => {
-    it('WHEN config sets requests THEN expect its entries in ignoreRequests', () => {
-        const { getConfig } = failOnNetworkError({ requests: ['foo'] });
-
-        chai.expect(getConfig()).to.deep.equal(
-            createConfig({ ignoreRequests: ['foo'] })
-        );
-    });
-
-    it('WHEN config sets requests THEN expect matching requests to be excluded', () => {
-        failOnNetworkError({ requests: ['foo'] });
-
-        incomingRequest('1', 'GET', 'http://foo');
-
-        chai.expect(() => responseReceived('1', 500)).to.not.throw();
-        chai.expect(commandEnd).to.not.throw();
-    });
-
-    it('WHEN config sets requests and ignoreRequests THEN expect requests to win', () => {
-        chai.expect(
-            createConfig({ ignoreRequests: ['foo'], requests: ['bar'] })
-                .ignoreRequests
-        ).to.deep.equal(mapToRequests(['bar']));
-    });
-
-    it('WHEN requests is undefined next to ignoreRequests THEN expect ignoreRequests', () => {
-        chai.expect(
-            createConfig({ ignoreRequests: ['foo'], requests: undefined })
-                .ignoreRequests
-        ).to.deep.equal(mapToRequests(['foo']));
-    });
-
-    it('WHEN older code calls setConfig({ ...getConfig(), requests }) THEN expect the list replaced', () => {
-        const { getConfig, setConfig } = failOnNetworkError({
-            ignoreRequests: ['foo'],
+describe('removed requests option', () => {
+    // a plain Error, as for other config mistakes
+    [
+        [{ requests: ['foo'] }, "{ requests: ['foo'] }"],
+        [
+            { ignoreRequests: ['foo'], requests: undefined },
+            "{ ignoreRequests: ['foo'], requests: undefined }",
+        ],
+    ].forEach(([config, title]) => {
+        it(`WHEN config ${title} THEN expect error that requests was renamed`, () => {
+            chai.expect(() => validateConfig(config as Config))
+                .to.throw(Error)
+                .with.property(
+                    'message',
+                    'cypress-fail-on-network-error: config.requests was renamed to ignoreRequests'
+                );
         });
-
-        setConfig({ ...getConfig(), requests: ['bar'] });
-
-        chai.expect(getConfig().ignoreRequests).to.deep.equal(
-            mapToRequests(['bar'])
-        );
     });
 
-    it('WHEN getConfig().requests is read THEN expect the ignoreRequests array', () => {
+    it('WHEN config sets requests THEN expect failOnNetworkError to throw', () => {
+        chai.expect(() =>
+            failOnNetworkError({ requests: ['foo'] } as Config)
+        ).to.throw(Error, 'config.requests was renamed to ignoreRequests');
+    });
+
+    it('WHEN getConfig() is read THEN expect no requests property', () => {
         const { getConfig } = failOnNetworkError({ ignoreRequests: ['foo'] });
 
-        chai.expect(getConfig().requests).to.equal(getConfig().ignoreRequests);
-    });
-
-    it('WHEN getConfig().requests is assigned THEN expect ignoreRequests replaced', () => {
-        const { getConfig } = failOnNetworkError({ ignoreRequests: ['foo'] });
-
-        getConfig().requests = [{ url: 'bar' }];
-
-        chai.expect(getConfig().ignoreRequests).to.deep.equal([{ url: 'bar' }]);
-    });
-
-    it('WHEN getConfig() is spread THEN expect requests not to be copied', () => {
-        const { getConfig } = failOnNetworkError({ ignoreRequests: ['foo'] });
-
-        chai.expect({ ...getConfig() }).to.not.have.property('requests');
-    });
-
-    it('WHEN an entry of requests is invalid THEN expect error naming config.requests', () => {
-        chai.expect(() => validateConfig({ requests: ['foo', 42] } as Config))
-            .to.throw(Error)
-            .with.property('message')
-            .that.contains('config.requests[1]');
+        chai.expect(getConfig()).to.not.have.property('requests');
+        // @ts-expect-error requests was removed from NormalizedConfig
+        getConfig().requests;
     });
 });
 

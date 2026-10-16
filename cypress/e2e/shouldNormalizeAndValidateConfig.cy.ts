@@ -1,4 +1,4 @@
-import { RequestMatcher } from '../../dist/index';
+import failOnNetworkError, { Config, RequestMatcher } from '../../dist/index';
 
 describe('shouldNormalizeAndValidateConfig', () => {
     beforeEach(() => {
@@ -22,5 +22,10 @@ describe('shouldNormalizeAndValidateConfig', () => {
 
     it('should fail when an entry has an unknown key', () => {
         cy.setIgnoredRequests([{ stauts: 500 } as unknown as RequestMatcher]);
+    });
+
+    // a config that fails validation leaves the support file's call active
+    it('should fail when the config sets the removed requests option', () => {
+        failOnNetworkError({ requests: ['xhr'] } as Config);
     });
 });
