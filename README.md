@@ -94,8 +94,6 @@ it('should tolerate an unavailable recommendations service', () => {
 | `cy.deleteIgnoredRequests(['foo'])`        | Removes equal entries from `ignoreRequests`, in any form: `'foo'` removes `{ url: 'foo' }`, and a predicate only the same function. |
 | `cy.waitForRequests(timeout)`              | Waits for pending requests, see [below](#wait-for-pending-requests). |
 
-The package declares the commands for TypeScript. `cy.getIgnoredRequests()` yields each entry normalized: a string becomes `{ url }`, a function `{ predicate }`, a number in `status` becomes `{ from, to }`, and `method` is upper case.
-
 To change other options, use `getConfig()` and `setConfig()`, which `failOnNetworkError()` returns. `setConfig()` accepts every form of entry:
 
 ```ts
@@ -116,8 +114,6 @@ it('should check every request the page makes', () => {
 ```
 
 `cy.waitForRequests(timeout = 10000)` waits until every request of the current test has a response or has failed. It checks every 500 ms, starting 500 ms after the command runs, so it also sees requests the page has just made. When the timeout passes first, the test continues without an error.
-
-It does not wait for requests that were pending when the page unloaded, such as after `cy.visit()` to another page; a response that still arrives is checked. Electron and Firefox report nothing for a request that the page aborts, so `waitForRequests` waits for it until the timeout.
 
 ## Debugging
 
