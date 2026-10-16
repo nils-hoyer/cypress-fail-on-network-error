@@ -25,6 +25,9 @@ Cypress.Commands.addAll({
     ) => {
         setConfig({ ...getConfig(), ignoreRequests: requests });
     },
+    setDebug: (debug: boolean) => {
+        setConfig({ ...getConfig(), debug });
+    },
     waitForRequests: (timeout?: number) => waitForRequests(timeout),
     // make a request from the page without waiting for the response
     fetch: (url: string, init?: RequestInit) => {
@@ -49,6 +52,7 @@ declare global {
             setConfigRequests(
                 requests: (string | RequestMatcher | RequestPredicate)[]
             ): Chainable<void>;
+            setDebug(debug: boolean): Chainable<void>;
             waitForRequests(timeout?: number): Chainable<void>;
             fetch(url: string, init?: RequestInit): Chainable<void>;
             xhr(url: string, method?: string): Chainable<void>;
