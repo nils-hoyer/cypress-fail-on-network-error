@@ -4,8 +4,6 @@ const prefix = 'cypress-fail-on-network-error:';
 
 export type Config = {
     ignoreRequests?: (string | RequestMatcher | RequestPredicate)[];
-    /** @deprecated Use `ignoreRequests`. When both are set, `requests` wins. */
-    requests?: (string | RequestMatcher | RequestPredicate)[];
     // also log each ignored request, with the entry that ignored it
     debug?: boolean;
 };
@@ -33,12 +31,6 @@ export interface RequestMatcher {
 // an entry of its own is shorthand for { predicate }
 export type RequestPredicate = (request: RequestSession) => boolean;
 
-/**
- * @deprecated Use `RequestMatcher`. `Request` hides the built-in fetch
- * `Request` type in files that import it.
- */
-export type Request = RequestMatcher;
-
 export type Range = {
     from: number;
     to: number;
@@ -55,8 +47,6 @@ export type NormalizedRequest = {
 
 export type NormalizedConfig = {
     ignoreRequests: NormalizedRequest[];
-    /** @deprecated Use `ignoreRequests`, which this reads and sets. */
-    requests: NormalizedRequest[];
     debug: boolean;
 };
 
@@ -297,8 +287,9 @@ export const addIgnoredRequestsCommands = ({
     });
 };
 
-// requests is the deprecated name of ignoreRequests
-const configKeys = ['ignoreRequests', 'requests', 'debug'];
+const configKeys = ['ignoreRequests', 'debug'];
+// options that were renamed, with their new name
+const renamedKeys: Record<string, string> = { requests: 'ignoreRequests' };
 const requestKeys = ['url', 'method', 'status', 'predicate'];
 
 // a broken config is not a failed check, so it throws an Error, not an AssertionError
@@ -319,6 +310,10 @@ const expectType = (value: unknown, types: string[], message: string) => {
 
 export const validateConfig = (config: Config): void => {
     expectType(config, ['Object'], 'config must be an object');
+    Object.keys(config).forEach((key) => {
+        if (renamedKeys.hasOwnProperty(key))
+            throw invalid(`config.${key} was renamed to ${renamedKeys[key]}`);
+    });
     // a misspelled option would otherwise be ignored, and every request fail
     const unknownConfigKeys = Object.keys(config).filter(
         (key) => configKeys.indexOf(key) === -1
@@ -327,9 +322,7 @@ export const validateConfig = (config: Config): void => {
         throw invalid(
             `config has unknown keys ${unknownConfigKeys.join(', ')}, use ignoreRequests or debug`
         );
-    // errors name the key the user passed
     validateRequests(config.ignoreRequests, 'config.ignoreRequests');
-    validateRequests(config.requests, 'config.requests');
     expectType(
         config.debug,
         ['boolean', 'undefined'],
@@ -441,26 +434,13 @@ const validateRequests = (requests: unknown, key: string): void => {
     });
 };
 
-export const createConfig = (config: Config): NormalizedConfig => {
-    // requests, the old name, wins when both are set, so that
-    // setConfig({ ...getConfig(), requests }) from older code replaces the list
-    const requests = config.requests ?? config.ignoreRequests;
-    const normalized = {
-        ignoreRequests: requests !== undefined ? mapToRequests(requests) : [],
-        debug: config.debug ?? false,
-    } as NormalizedConfig;
-    // getConfig().requests keeps working, and { ...getConfig() } skips it
-    Object.defineProperty(normalized, 'requests', {
-        get(this: NormalizedConfig) {
-            return this.ignoreRequests;
-        },
-        set(this: NormalizedConfig, value: NormalizedRequest[]) {
-            this.ignoreRequests = value;
-        },
-        enumerable: false,
-    });
-    return normalized;
-};
+export const createConfig = (config: Config): NormalizedConfig => ({
+    ignoreRequests:
+        config.ignoreRequests !== undefined
+            ? mapToRequests(config.ignoreRequests)
+            : [],
+    debug: config.debug ?? false,
+});
 
 export const mapToRequests = (
     _unknowns: (string | RequestMatcher | RequestPredicate)[]
