@@ -65,7 +65,7 @@ failOnNetworkError(config);
 - `url` is a `string` or `RegExp` that matches anywhere in the full URL. Strings are converted with `new RegExp(string)`, so [escape special characters](https://javascript.info/regexp-escaping).
 - `method` is any HTTP method, such as `GET`, `HEAD` or `OPTIONS`, in any case, or a list of methods, which matches any of them.
 - `status` is a number, or a range `{ from, to }` that includes both ends.
-- `predicate` is a function that gets the request's `method`, `url`, and `status` or `error`, and excludes it when it returns `true`. It is called only when the other fields of its entry match. An error it throws fails the test.
+- `predicate` is a function that gets the request's `method`, `url`, `requestHeaders`, and `status` and `responseHeaders` or `error`, and excludes it when it returns `true`. Header names are lower case, for example `({ responseHeaders }) => responseHeaders?.['x-expected-error'] === 'true'`. Request and response bodies are not available. It is called only when the other fields of its entry match. An error it throws fails the test.
 - A request that fails without a response, for example when the connection is refused, has no status. Only entries without `status` match it.
 
 ## Change the config in a test

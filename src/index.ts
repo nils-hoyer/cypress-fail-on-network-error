@@ -150,6 +150,7 @@ export default function failOnNetworkError(_config: Config = {}) {
                 requestId: event.requestId,
                 method: event.method,
                 url: event.url,
+                requestHeaders: lowerCaseNames(event.headers),
                 status: undefined,
             });
             return;
@@ -179,7 +180,11 @@ export default function failOnNetworkError(_config: Config = {}) {
         requests = requests.map((request: RequestSession) => {
             if (request.requestId !== event.requestId) return request;
             return eventName === 'response:received'
-                ? { ...request, status: event.status }
+                ? {
+                      ...request,
+                      status: event.status,
+                      responseHeaders: lowerCaseNames(event.headers),
+                  }
                 : {
                       ...request,
                       error:
@@ -628,6 +633,19 @@ const logCheckedRequest = ({ request, ignoredBy, entries }: CheckedRequest) => {
     });
 };
 
+// browsers send request header names in any case, so a predicate can look
+// them up in lower case
+const lowerCaseNames = (
+    headers: HeaderValues | undefined
+): HeaderValues | undefined => {
+    if (headers === undefined || headers === null) return undefined;
+    const lowerCased: HeaderValues = {};
+    Object.keys(headers).forEach((name) => {
+        lowerCased[name.toLowerCase()] = headers[name];
+    });
+    return lowerCased;
+};
+
 // Chrome reports a request that the page aborted, or that a navigation
 // cancelled, as a request:error with this message (seen with Cypress 16.1.1)
 const isCancelledByBrowser = (message: string | undefined): boolean =>
@@ -660,10 +678,15 @@ type CheckedRequest = {
     entries: NormalizedRequest[];
 };
 
+// header names in lower case, as Node.js gives them for responses
+type HeaderValues = { [name: string]: string | string[] };
+
 export type RequestSession = {
     requestId: string;
     method: string;
     url: string;
+    requestHeaders?: HeaderValues;
+    responseHeaders?: HeaderValues;
     status?: number;
     // set when the request failed without a response
     error?: string;

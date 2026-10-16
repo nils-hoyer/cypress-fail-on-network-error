@@ -36,17 +36,22 @@ const incomingRequest = (
     requestId: string,
     method: string,
     url: string,
-    resourceType?: string
+    resourceType?: string,
+    headers?: Record<string, string | string[]>
 ) =>
     emit('request:event', 'incoming:request', {
         requestId,
         method,
         url,
         resourceType,
+        headers,
     });
 
-const responseReceived = (requestId: string, status: number) =>
-    emit('request:event', 'response:received', { requestId, status });
+const responseReceived = (
+    requestId: string,
+    status: number,
+    headers?: Record<string, string | string[]>
+) => emit('request:event', 'response:received', { requestId, status, headers });
 
 const requestError = (requestId: string, message: string) =>
     emit('request:event', 'request:error', {
@@ -430,6 +435,52 @@ describe('request:event handler', () => {
         testAfterRun();
 
         chai.expect(commandEnd).to.not.throw();
+    });
+
+    it('WHEN a predicate checks headers THEN expect request and response headers with lower-case names', () => {
+        let received: RequestSession | undefined;
+        failOnNetworkError({
+            ignoreRequests: [
+                (request) => {
+                    received = request;
+                    return true;
+                },
+            ],
+        });
+
+        incomingRequest('1', 'GET', 'http://foo', 'fetch', {
+            'X-Expected-Error': 'true',
+        });
+        responseReceived('1', 500, {
+            'content-type': 'application/json',
+            'set-cookie': ['a=1', 'b=2'],
+        });
+
+        chai.expect(received).to.deep.include({
+            requestHeaders: { 'x-expected-error': 'true' },
+            responseHeaders: {
+                'content-type': 'application/json',
+                'set-cookie': ['a=1', 'b=2'],
+            },
+        });
+    });
+
+    it('WHEN events have no headers THEN expect no headers on the request', () => {
+        let received: RequestSession | undefined;
+        failOnNetworkError({
+            ignoreRequests: [
+                (request) => {
+                    received = request;
+                    return true;
+                },
+            ],
+        });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 500);
+
+        chai.expect(received?.requestHeaders).to.be.undefined;
+        chai.expect(received?.responseHeaders).to.be.undefined;
     });
 
     it('WHEN event is not a request event THEN expect it to be ignored', () => {
