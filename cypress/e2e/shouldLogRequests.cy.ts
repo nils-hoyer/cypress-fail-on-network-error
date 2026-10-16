@@ -6,7 +6,7 @@ describe('shouldLogRequests', () => {
     beforeEach(() => {
         logs = [];
         cy.on('log:added', ({ name, message }) => logs.push({ name, message }));
-        cy.setConfigRequests([{ status: { from: 200, to: 399 } }]);
+        cy.setIgnoredRequests([{ status: { from: 200, to: 399 } }]);
         cy.visit('/');
     });
 

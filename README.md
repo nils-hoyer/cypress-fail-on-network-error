@@ -70,41 +70,47 @@ failOnNetworkError(config);
 
 ## Change the config in a test
 
-`failOnNetworkError()` returns `getConfig()` and `setConfig()`. Wrap them in a command in your support file:
+To change the ignored requests in a test, and to wait for pending requests, register the commands in your support file:
 
 ```ts
-const { getConfig, setConfig } = failOnNetworkError(config);
+import failOnNetworkError, {
+    addIgnoredRequestsCommands,
+} from 'cypress-fail-on-network-error';
 
-Cypress.Commands.add('setIgnoredRequests', (ignoreRequests) =>
-    setConfig({ ...getConfig(), ignoreRequests })
-);
+const failOnNetwork = failOnNetworkError(config);
+addIgnoredRequestsCommands(failOnNetwork);
 ```
 
-Then use it in a test. Changes last until the end of the test. The command replaces `ignoreRequests`, so include the entries you still need:
+Then use them in a test. Changes last until the end of the test.
 
 ```ts
 it('should tolerate an unavailable recommendations service', () => {
-    cy.setIgnoredRequests([
-        { status: { from: 200, to: 399 } },
-        { url: /\/api\/recommendations/, status: 503 },
-    ]);
+    cy.addIgnoredRequests([{ url: /\/api\/recommendations/, status: 503 }]);
     cy.visit('/');
 });
 ```
 
-`getConfig()` returns each entry normalized: a string becomes `{ url }`, a number in `status` becomes `{ from, to }`, and `method` is upper case. Change the config through `setConfig()`, which accepts every form, rather than by changing what `getConfig()` returns.
+| Command                                    | Description |
+| ------------------------------------------ | ----------- |
+| `cy.getIgnoredRequests()`                  | Yields `ignoreRequests`. |
+| `cy.setIgnoredRequests(['foo', { url: /bar/ }])`    | Replaces `ignoreRequests`. |
+| `cy.addIgnoredRequests([{ status: 404 }])` | Adds to `ignoreRequests`. |
+| `cy.deleteIgnoredRequests(['foo'])`        | Removes equal entries from `ignoreRequests`, in any form: `'foo'` removes `{ url: 'foo' }`, and a predicate only the same function. |
+| `cy.waitForRequests(timeout)`              | Waits for pending requests, see [below](#wait-for-pending-requests). |
 
-For TypeScript, see the command declarations in this repository's [support file](https://github.com/nils-hoyer/cypress-fail-on-network-error/blob/main/cypress/support/e2e.ts).
+The package declares the commands for TypeScript. `cy.getIgnoredRequests()` yields each entry normalized: a string becomes `{ url }`, a function `{ predicate }`, a number in `status` becomes `{ from, to }`, and `method` is upper case.
+
+To change other options, use `getConfig()` and `setConfig()`, which `failOnNetworkError()` returns. `setConfig()` accepts every form of entry:
+
+```ts
+const { getConfig, setConfig } = failOnNetwork;
+
+Cypress.Commands.add('setDebug', (debug) => setConfig({ ...getConfig(), debug }));
+```
 
 ## Wait for pending requests
 
-A response that arrives after the test's last command is not checked. To check slow requests too, wrap `waitForRequests()` in a command. Take it from the same `failOnNetworkError()` call as `getConfig()` and `setConfig()`.
-
-```ts
-const { getConfig, setConfig, waitForRequests } = failOnNetworkError(config);
-
-Cypress.Commands.add('waitForRequests', (timeout) => waitForRequests(timeout));
-```
+A response that arrives after the test's last command is not checked. To check slow requests too, end the test with `cy.waitForRequests()`, which `addIgnoredRequestsCommands()` registers:
 
 ```ts
 it('should check every request the page makes', () => {
@@ -113,7 +119,7 @@ it('should check every request the page makes', () => {
 });
 ```
 
-`waitForRequests(timeout = 10000)` waits until every request of the current test has a response or has failed. It checks every 500 ms, starting 500 ms after the command runs, so it also sees requests the page has just made. When the timeout passes first, the test continues without an error.
+`cy.waitForRequests(timeout = 10000)` waits until every request of the current test has a response or has failed. It checks every 500 ms, starting 500 ms after the command runs, so it also sees requests the page has just made. When the timeout passes first, the test continues without an error.
 
 It does not wait for requests that were pending when the page unloaded, such as after `cy.visit()` to another page; a response that still arrives is checked. Electron and Firefox report nothing for a request that the page aborts, so `waitForRequests` waits for it until the timeout.
 

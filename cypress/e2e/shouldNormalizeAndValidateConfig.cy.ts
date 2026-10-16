@@ -6,7 +6,7 @@ describe('shouldNormalizeAndValidateConfig', () => {
     });
 
     it('should pass when a lower-case method matches the request', () => {
-        cy.setConfigRequests([
+        cy.setIgnoredRequests([
             { url: /xhr/, method: 'get' } as unknown as RequestMatcher,
         ]);
         cy.xhr('/xhr?status=500');
@@ -15,12 +15,12 @@ describe('shouldNormalizeAndValidateConfig', () => {
 
     // browsers upper-case only the standard methods, so fetch sends "patch"
     it('should pass when a method the browser sends in lower case matches', () => {
-        cy.setConfigRequests([{ url: /xhr/, method: 'PATCH' }]);
+        cy.setIgnoredRequests([{ url: /xhr/, method: 'PATCH' }]);
         cy.fetch('/xhr?status=500', { method: 'patch' });
         cy.waitForRequests();
     });
 
     it('should fail when an entry has an unknown key', () => {
-        cy.setConfigRequests([{ stauts: 500 } as unknown as RequestMatcher]);
+        cy.setIgnoredRequests([{ stauts: 500 } as unknown as RequestMatcher]);
     });
 });

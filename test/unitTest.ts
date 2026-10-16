@@ -2,6 +2,7 @@ import * as chai from 'chai';
 import { AssertionError } from 'chai';
 import { readFileSync } from 'fs';
 import failOnNetworkError, {
+    addIgnoredRequestsCommands,
     type Config,
     type Request,
     type RequestMatcher,
@@ -10,6 +11,7 @@ import failOnNetworkError, {
     entryToString,
     escapeMarkdown,
     isRequestExcluded,
+    isSameEntry,
     mapToRequests,
     validateConfig,
 } from './../dist/index.js';
@@ -24,6 +26,8 @@ type LogOptions = {
     consoleProps: () => Record<string, unknown>;
 };
 let logs: LogOptions[] = [];
+
+let customCommands: Record<string, (...args: any[]) => unknown> = {};
 
 const emit = (eventName: string, ...args: unknown[]) =>
     listeners[eventName]?.forEach((listener) => listener(...args));
@@ -107,7 +111,13 @@ beforeEach(() => {
         log: (options: LogOptions) => {
             logs.push(options);
         },
+        Commands: {
+            addAll: (commands: typeof customCommands) => {
+                customCommands = { ...customCommands, ...commands };
+            },
+        },
     };
+    customCommands = {};
     commands = [];
     (globalThis as any).cy = {
         wrap: (value: unknown, options: { timeout?: number } = {}) => {
@@ -560,6 +570,129 @@ describe('failure message and command log', () => {
             'ignored',
             'unexpected',
         ]);
+    });
+});
+
+describe('addIgnoredRequestsCommands()', () => {
+    const register = (config: Config) => {
+        const failOnNetwork = failOnNetworkError(config);
+        addIgnoredRequestsCommands(failOnNetwork);
+        return failOnNetwork;
+    };
+
+    it('WHEN called THEN expect the five commands registered', () => {
+        register({});
+
+        chai.expect(Object.keys(customCommands)).to.have.members([
+            'getIgnoredRequests',
+            'setIgnoredRequests',
+            'addIgnoredRequests',
+            'deleteIgnoredRequests',
+            'waitForRequests',
+        ]);
+    });
+
+    it('WHEN getIgnoredRequests runs THEN expect it to yield ignoreRequests', async () => {
+        const { getConfig } = register({ ignoreRequests: ['foo'] });
+
+        customCommands.getIgnoredRequests();
+
+        chai.expect(await runCommands()).to.equal(getConfig().ignoreRequests);
+    });
+
+    it('WHEN setIgnoredRequests runs THEN expect ignoreRequests replaced and other options kept', () => {
+        const { getConfig } = register({
+            ignoreRequests: ['foo'],
+            debug: true,
+        });
+
+        customCommands.setIgnoredRequests(['bar']);
+
+        chai.expect(getConfig()).to.deep.equal(
+            createConfig({ ignoreRequests: ['bar'], debug: true })
+        );
+    });
+
+    it('WHEN addIgnoredRequests runs THEN expect the entries appended', () => {
+        const { getConfig } = register({ ignoreRequests: ['foo'] });
+
+        customCommands.addIgnoredRequests([{ status: 404 }]);
+
+        chai.expect(getConfig().ignoreRequests).to.deep.equal(
+            mapToRequests(['foo', { status: 404 }])
+        );
+    });
+
+    it('WHEN deleteIgnoredRequests runs THEN expect equal entries removed, in any form', () => {
+        const predicate = () => true;
+        const { getConfig } = register({
+            ignoreRequests: [
+                'foo',
+                { url: /foo/ },
+                { status: 404 },
+                predicate,
+                () => true,
+            ],
+        });
+
+        customCommands.deleteIgnoredRequests([
+            { url: 'foo' },
+            { status: { from: 404, to: 404 } },
+            predicate,
+        ]);
+
+        chai.expect(
+            getConfig().ignoreRequests.map((entry) => entryToString(entry))
+        ).to.deep.equal(['{ url: /foo/ }', '{ predicate: function }']);
+    });
+
+    it('WHEN deleteIgnoredRequests gets an invalid entry THEN expect a plain Error', () => {
+        register({ ignoreRequests: ['foo'] });
+
+        chai.expect(() => customCommands.deleteIgnoredRequests([42]))
+            .to.throw(Error)
+            .with.property('constructor', Error);
+    });
+
+    it('WHEN waitForRequests runs THEN expect it to wait like the returned waitForRequests', async () => {
+        register({});
+
+        customCommands.waitForRequests(1000);
+
+        const start = Date.now();
+        await runCommands();
+        chai.expect(Date.now() - start).to.be.within(500, 700);
+    });
+});
+
+describe('isSameEntry()', () => {
+    const entry = (request: string | RequestMatcher) =>
+        mapToRequests([request])[0];
+
+    [
+        ['foo', { url: 'foo' }, true],
+        ['foo', { url: /foo/ }, false],
+        [{ status: 404 }, { status: { from: 404, to: 404 } }, true],
+        [{ method: 'get' }, { method: 'GET' }, true],
+        [{ url: 'foo', status: 404 }, { url: 'foo' }, false],
+    ].forEach(([a, b, expected]) => {
+        it(`WHEN entries are ${JSON.stringify(a)} and ${JSON.stringify(b)} THEN expect ${expected}`, () => {
+            chai.expect(
+                isSameEntry(
+                    entry(a as string | RequestMatcher),
+                    entry(b as string | RequestMatcher)
+                )
+            ).to.equal(expected);
+        });
+    });
+
+    it('WHEN predicates are different functions THEN expect false', () => {
+        chai.expect(
+            isSameEntry(
+                entry({ predicate: () => true }),
+                entry({ predicate: () => true })
+            )
+        ).to.be.false;
     });
 });
 

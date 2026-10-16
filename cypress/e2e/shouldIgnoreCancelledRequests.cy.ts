@@ -2,7 +2,7 @@
 // send no event for it
 describe('shouldIgnoreCancelledRequests', () => {
     beforeEach(() => {
-        cy.setConfigRequests([]);
+        cy.setIgnoredRequests([]);
         cy.visit('/');
     });
 

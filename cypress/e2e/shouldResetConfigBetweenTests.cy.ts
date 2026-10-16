@@ -8,8 +8,8 @@ describe('shouldResetConfigBetweenTests', () => {
         cy.wrap({ some: 'command' });
     });
 
-    it('should pass on a request excluded through setConfigRequests', () => {
-        cy.setConfigRequests(['/xhr']);
+    it('should pass on a request excluded through setIgnoredRequests', () => {
+        cy.setIgnoredRequests(['/xhr']);
         cy.fetch('/xhr?status=500');
         cy.waitForRequests();
     });

@@ -3,8 +3,8 @@ describe('shouldNotLeakConfigChanges', () => {
         cy.visit('/');
     });
 
-    it('should pass on a request excluded through getConfigRequests', () => {
-        cy.getConfigRequests().then((requests) =>
+    it('should pass on a request excluded through getIgnoredRequests', () => {
+        cy.getIgnoredRequests().then((requests) =>
             requests.push({ url: '/xhr' })
         );
         cy.fetch('/xhr?status=500');
