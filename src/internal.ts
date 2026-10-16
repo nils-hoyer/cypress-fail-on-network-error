@@ -202,11 +202,17 @@ const validateRequests = (requests: unknown, key: string): void => {
     });
 };
 
+// without ignoreRequests, only error responses and requests without a
+// response fail the test; ignoreRequests replaces this default
+const defaultIgnoreRequests: RequestMatcher[] = [
+    { status: { from: 100, to: 399 } },
+];
+
 export const createConfig = (config: Config): NormalizedConfig => ({
-    ignoreRequests:
-        config.ignoreRequests !== undefined
-            ? mapToRequests(config.ignoreRequests)
-            : [],
+    // mapToRequests copies the default, so a change to getConfig() stays there
+    ignoreRequests: mapToRequests(
+        config.ignoreRequests ?? defaultIgnoreRequests
+    ),
     debug: config.debug ?? false,
 });
 
