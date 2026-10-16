@@ -2,7 +2,7 @@
 // command:end follows to fail the test, and test:after:run drops the request
 describe('shouldIgnoreResponsesAfterLastCommand', () => {
     beforeEach(() => {
-        cy.setConfigRequests([{ status: { from: 200, to: 399 } }]);
+        cy.setIgnoredRequests([{ status: { from: 200, to: 399 } }]);
         cy.visit('/');
     });
 
