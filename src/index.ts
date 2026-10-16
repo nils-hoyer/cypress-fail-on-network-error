@@ -8,9 +8,21 @@ export type Config = {
     requests?: (string | RequestMatcher)[];
 };
 
+// the common methods, for autocompletion; any other method works too
+export type Method =
+    | 'GET'
+    | 'POST'
+    | 'PUT'
+    | 'DELETE'
+    | 'PATCH'
+    | 'HEAD'
+    | 'OPTIONS'
+    | (string & {});
+
 export interface RequestMatcher {
     url?: string | RegExp;
-    method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+    // a list matches any of its methods
+    method?: Method | Method[];
     status?: number | Range;
 }
 
@@ -258,9 +270,25 @@ const validateRequests = (requests: unknown, key: string): void => {
         }
         expectType(
             request.method,
-            ['string', 'undefined'],
-            `${name}.method must be a string`
+            ['string', 'Array', 'undefined'],
+            `${name}.method must be a string or an array of strings`
         );
+        if (Array.isArray(request.method)) {
+            // an empty list, or an empty method in it, matches no request
+            if (request.method.length === 0)
+                throw invalid(`${name}.method must not be an empty array`);
+            request.method.forEach((method: unknown, methodIndex: number) => {
+                expectType(
+                    method,
+                    ['string'],
+                    `${name}.method[${methodIndex}] must be a string`
+                );
+                if (method === '')
+                    throw invalid(
+                        `${name}.method[${methodIndex}] must not be empty`
+                    );
+            });
+        }
         expectType(
             request.status,
             ['Object', 'number', 'undefined'],
@@ -319,8 +347,7 @@ export const mapToRequests = (
 
             return {
                 url: unknown.url,
-                // the event reports methods in upper case
-                method: unknown.method?.toUpperCase() as RequestMatcher['method'],
+                method: upperCaseMethod(unknown.method),
                 status,
             };
         }
@@ -331,6 +358,17 @@ export const mapToRequests = (
             status: undefined,
         };
     });
+
+// matched against the request's method in upper case
+const upperCaseMethod = (
+    method: Method | Method[] | undefined
+): Method | Method[] | undefined =>
+    Array.isArray(method)
+        ? method.map((each) => each.toUpperCase())
+        : method?.toUpperCase();
+
+const toArray = <T>(value: T | T[]): T[] =>
+    Array.isArray(value) ? value : [value];
 
 export const findRequest = (
     requests: RequestSession[],
@@ -355,7 +393,9 @@ export const isRequestExcluded = (
             : true;
         // browsers upper-case only the standard methods, so fetch keeps 'patch'
         const methodMatch = configRequest.method
-            ? configRequest.method === request.method.toUpperCase()
+            ? toArray(configRequest.method).indexOf(
+                  request.method.toUpperCase()
+              ) !== -1
             : true;
         return urlMatch && statusMatch && methodMatch;
     });

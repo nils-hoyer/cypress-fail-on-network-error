@@ -48,6 +48,7 @@ const config: Config = {
         'analytics', // any request whose URL contains "analytics"
         { url: /\/api\/feature-flags/, method: 'GET', status: 404 },
         { method: 'POST', status: 409 }, // a 409 from any POST request
+        { method: ['HEAD', 'OPTIONS'] }, // any HEAD or OPTIONS request
     ],
 };
 
@@ -58,7 +59,7 @@ failOnNetworkError(config);
 
 - Every field an entry sets must match. A field it leaves out matches any value.
 - `url` is a `string` or `RegExp` that matches anywhere in the full URL. Strings are converted with `new RegExp(string)`, so [escape special characters](https://javascript.info/regexp-escaping).
-- `method` is `GET`, `POST`, `PUT`, `DELETE` or `PATCH`, in any case.
+- `method` is any HTTP method, such as `GET`, `HEAD` or `OPTIONS`, in any case, or a list of methods, which matches any of them.
 - `status` is a number, or a range `{ from, to }` that includes both ends.
 - A request that fails without a response, for example when the connection is refused, has no status. Only entries without `status` match it.
 

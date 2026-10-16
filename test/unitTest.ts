@@ -441,6 +441,18 @@ describe('types', () => {
 
         chai.expect(() => validateConfig(config)).to.not.throw();
     });
+    it('WHEN method is any string or a list of methods THEN expect it to compile', () => {
+        const config: Config = {
+            ignoreRequests: [
+                { method: 'HEAD' },
+                { method: 'OPTIONS' },
+                { method: 'PURGE' },
+                { method: ['GET', 'POST'] },
+            ],
+        };
+
+        chai.expect(() => validateConfig(config)).to.not.throw();
+    });
 });
 
 describe('getConfig()', () => {
@@ -735,6 +747,25 @@ describe('validateConfig()', () => {
         });
     });
 
+    [
+        [{ method: [] }, '{ method: [] }', 'config.ignoreRequests[1].method'],
+        [
+            { method: ['GET', 42] },
+            "{ method: ['GET', 42] }",
+            'config.ignoreRequests[1].method[1]',
+        ],
+        [
+            { method: ['GET', ''] },
+            "{ method: ['GET', ''] }",
+            'config.ignoreRequests[1].method[1]',
+        ],
+        [{ method: {} }, '{ method: {} }', 'config.ignoreRequests[1].method'],
+    ].forEach(([entry, title, name]) => {
+        it(`WHEN entry ${title} has an invalid method THEN expect error naming ${name}`, () => {
+            expectInvalid({ ignoreRequests: ['foo', entry] }, name as string);
+        });
+    });
+
     it('WHEN config is normalized by createConfig THEN expect no error', () => {
         const config = createConfig({
             ignoreRequests: [
@@ -773,6 +804,13 @@ describe('mapToRequests()', () => {
         chai.expect(
             mapToRequests([{ method: 'get' } as unknown as RequestMatcher])
         ).to.deep.equal([{ url: undefined, status: undefined, method: 'GET' }]);
+    });
+    it('WHEN method is a list THEN expect each method upper-cased', () => {
+        chai.expect(
+            mapToRequests([{ method: ['get', 'Purge'] }])
+        ).to.deep.equal([
+            { url: undefined, status: undefined, method: ['GET', 'PURGE'] },
+        ]);
     });
     it('WHEN status range is reversed THEN expect from and to swapped', () => {
         chai.expect(
@@ -822,6 +860,28 @@ describe('isRequestExcluded()', () => {
             status: 400,
         };
         chai.expect(isRequestExcluded(request, config)).to.be.true;
+    });
+
+    [
+        [{ method: 'HEAD' }, 'HEAD', true],
+        [{ method: 'OPTIONS' }, 'OPTIONS', true],
+        // browsers keep a custom method's case
+        [{ method: 'PURGE' }, 'purge', true],
+        [{ method: ['GET', 'PUT'] }, 'PUT', true],
+        [{ method: ['GET', 'PUT'] }, 'POST', false],
+    ].forEach(([entry, method, expected]) => {
+        it(`WHEN entry is ${JSON.stringify(entry)} and request method is ${method} THEN expect ${expected}`, () => {
+            const config = createConfig({
+                ignoreRequests: [entry as RequestMatcher],
+            });
+            const request: RequestSession = {
+                requestId: '1',
+                method: method as string,
+                url: 'http://foo',
+                status: 500,
+            };
+            chai.expect(isRequestExcluded(request, config)).to.equal(expected);
+        });
     });
 
     describe('WHEN config has status range 200 to 399', () => {
