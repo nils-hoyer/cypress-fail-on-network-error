@@ -82,6 +82,11 @@ const testAfterRun = () => emit('test:after:run');
 
 const commandEnd = () => emit('command:end');
 
+// a timer can fire 1 ms early by Date.now(), because Node's event loop clock
+// counts whole milliseconds, so allow a few ms below the lower bound
+const expectElapsed = (start: number, from: number, to: number) =>
+    chai.expect(Date.now() - start).to.be.within(from - 5, to);
+
 // a minimal cy command queue: commands run in order when runCommands() is
 // called, and a command fails when it takes longer than its timeout
 type Command = { run: (subject: unknown) => unknown; timeout: number };
@@ -766,7 +771,7 @@ describe('addIgnoredRequestsCommands()', () => {
 
         const start = Date.now();
         await runCommands();
-        chai.expect(Date.now() - start).to.be.within(500, 700);
+        expectElapsed(start, 500, 700);
     });
 });
 
@@ -857,7 +862,7 @@ describe('waitForRequests()', function () {
 
         const start = Date.now();
         await runCommands();
-        chai.expect(Date.now() - start).to.be.within(500, 700);
+        expectElapsed(start, 500, 700);
     });
 
     it('WHEN request was cancelled by the browser THEN expect it to resolve at the first check', async () => {
@@ -869,7 +874,7 @@ describe('waitForRequests()', function () {
 
         const start = Date.now();
         await runCommands();
-        chai.expect(Date.now() - start).to.be.within(500, 700);
+        expectElapsed(start, 500, 700);
     });
 
     it('WHEN page unloads with a request pending THEN expect it to resolve at the first check', async () => {
@@ -881,7 +886,7 @@ describe('waitForRequests()', function () {
 
         const start = Date.now();
         await runCommands();
-        chai.expect(Date.now() - start).to.be.within(500, 700);
+        expectElapsed(start, 500, 700);
     });
 
     it('WHEN no request was made THEN expect it to resolve at the first check', async () => {
@@ -893,7 +898,7 @@ describe('waitForRequests()', function () {
 
         const start = Date.now();
         await runCommands();
-        chai.expect(Date.now() - start).to.be.within(500, 700);
+        expectElapsed(start, 500, 700);
     });
 
     it('WHEN request arrives just after the command starts THEN expect it to wait for that request', async () => {
@@ -908,7 +913,7 @@ describe('waitForRequests()', function () {
 
         const start = Date.now();
         await runCommands();
-        chai.expect(Date.now() - start).to.be.within(800, 1200);
+        expectElapsed(start, 800, 1200);
     });
 
     it('WHEN request is still pending at the timeout THEN expect it to resolve without failing', async () => {
@@ -921,7 +926,7 @@ describe('waitForRequests()', function () {
 
         const start = Date.now();
         await runCommands();
-        chai.expect(Date.now() - start).to.be.within(1200, 1400);
+        expectElapsed(start, 1200, 1400);
     });
 
     it('WHEN request is made after waitForRequests is called THEN expect it to wait for that request', async () => {
@@ -935,7 +940,7 @@ describe('waitForRequests()', function () {
 
         const start = Date.now();
         await runCommands();
-        chai.expect(Date.now() - start).to.be.within(300, 1000);
+        expectElapsed(start, 300, 1000);
     });
 });
 
