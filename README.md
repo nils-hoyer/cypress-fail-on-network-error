@@ -56,7 +56,7 @@ failOnNetworkError(config);
 ### How requests are matched
 
 - Every field an entry sets must match. A field it leaves out matches any value.
-- `url` is a `string` or a `RegExp`. A string matches a URL that contains it, or, as in `cy.intercept()`, a URL whose full URL or path and query match it as a [glob](https://on.cypress.io/minimatch), such as `'**/*.map'` or `'/api/*/users'`. A `RegExp` matches anywhere in the full URL.
+- `url` is a `string` or a `RegExp`. A string matches when the URL contains it, such as `'/api/users'`, or when it matches as a [glob](https://on.cypress.io/minimatch), as in `cy.intercept()`, such as `'**/*.map'` or `'/api/*/users'`. A `RegExp` matches anywhere in the full URL.
 - `method` is any HTTP method, such as `GET`, `HEAD` or `OPTIONS`, in any case, or a list of methods, which matches any of them.
 - `status` is a number, or a range `{ from, to }` that includes both ends.
 - `predicate` is a function that gets the request's `method`, `url`, `requestHeaders`, and `status` and `responseHeaders` or `error`, and excludes it when it returns `true`. Header names are lower case, for example `({ responseHeaders }) => responseHeaders?.['x-expected-error'] === 'true'`. Request and response bodies are not available. It is called only when the other fields of its entry match. An error it throws fails the test.
