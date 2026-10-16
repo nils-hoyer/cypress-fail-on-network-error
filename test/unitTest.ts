@@ -1,5 +1,6 @@
 import * as chai from 'chai';
 import { AssertionError } from 'chai';
+import { readFileSync } from 'fs';
 import failOnNetworkError, {
     type Config,
     type Request,
@@ -118,6 +119,18 @@ describe('failOnNetworkError()', () => {
         chai.expect(() => failOnNetworkError(null as unknown as Config))
             .to.throw(Error)
             .with.property('constructor', Error);
+    });
+});
+
+describe('dist/index.js', () => {
+    // the plugin is bundled into every user's support file
+    it('WHEN the plugin is built THEN expect it to import only chai', () => {
+        const source = readFileSync('dist/index.js', 'utf8');
+        const imports = [
+            ...source.matchAll(/^import .* from '([^']+)';$/gm),
+        ].map((match) => match[1]);
+
+        chai.expect(imports).to.deep.equal(['chai']);
     });
 });
 
@@ -574,6 +587,37 @@ describe('validateConfig()', () => {
             expectInvalid(
                 { requests: ['foo', entry] },
                 `config.requests[1].${key}`
+            );
+        });
+    });
+
+    [
+        [null, 'config must be an object, got null'],
+        [['foo'], 'config must be an object, got Array'],
+        [{ requests: {} }, 'config.requests must be an array, got Object'],
+        [{ requests: [42] }, 'must be a string or an object, got number'],
+        [{ requests: [/foo/] }, 'must be a string or an object, got RegExp'],
+        [
+            { requests: [{ url: () => true }] },
+            '.url must be a string or a RegExp, got function',
+        ],
+        [
+            { requests: [{ status: new Date() }] },
+            '.status must be a number or a { from, to } range, got Date',
+        ],
+        [
+            { requests: [{ status: { from: 200, to: '299' } }] },
+            '.status.to must be a number, got string',
+        ],
+        [
+            { requests: [{ status: { from: undefined, to: 299 } }] },
+            '.status.from must be a number, got undefined',
+        ],
+    ].forEach(([config, message]) => {
+        it(`WHEN config is invalid THEN expect the message to name the type it got: ${message}`, () => {
+            chai.expect(() => validateConfig(config as Config)).to.throw(
+                Error,
+                message as string
             );
         });
     });
