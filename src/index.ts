@@ -3,6 +3,8 @@ import { AssertionError } from 'chai';
 const prefix = 'cypress-fail-on-network-error:';
 
 export type Config = {
+    ignoreRequests?: (string | RequestMatcher)[];
+    /** @deprecated Use `ignoreRequests`. When both are set, `requests` wins. */
     requests?: (string | RequestMatcher)[];
 };
 
@@ -32,6 +34,8 @@ export type NormalizedRequest = {
 };
 
 export type NormalizedConfig = {
+    ignoreRequests: NormalizedRequest[];
+    /** @deprecated Use `ignoreRequests`, which this reads and sets. */
     requests: NormalizedRequest[];
 };
 
@@ -164,7 +168,8 @@ export default function failOnNetworkError(_config: Config = {}) {
     };
 }
 
-const configKeys = ['requests'];
+// requests is the deprecated name of ignoreRequests
+const configKeys = ['ignoreRequests', 'requests'];
 const requestKeys = ['url', 'method', 'status'];
 
 // a broken config is not a failed check, so it throws an Error, not an AssertionError
@@ -191,16 +196,18 @@ export const validateConfig = (config: Config): void => {
     );
     if (unknownConfigKeys.length > 0)
         throw invalid(
-            `config has unknown keys ${unknownConfigKeys.join(', ')}, use requests`
+            `config has unknown keys ${unknownConfigKeys.join(', ')}, use ignoreRequests`
         );
-    expectType(
-        config.requests,
-        ['Array', 'undefined'],
-        'config.requests must be an array'
-    );
+    // errors name the key the user passed
+    validateRequests(config.ignoreRequests, 'config.ignoreRequests');
+    validateRequests(config.requests, 'config.requests');
+};
 
-    config.requests?.forEach((_request: unknown, index: number) => {
-        const name = `config.requests[${index}]`;
+const validateRequests = (requests: unknown, key: string): void => {
+    expectType(requests, ['Array', 'undefined'], `${key} must be an array`);
+
+    (requests as unknown[] | undefined)?.forEach((_request, index) => {
+        const name = `${key}[${index}]`;
         expectType(
             _request,
             ['string', 'Object'],
@@ -276,10 +283,23 @@ export const validateConfig = (config: Config): void => {
 };
 
 export const createConfig = (config: Config): NormalizedConfig => {
-    return {
-        requests:
-            config.requests !== undefined ? mapToRequests(config.requests) : [],
-    };
+    // requests, the old name, wins when both are set, so that
+    // setConfig({ ...getConfig(), requests }) from older code replaces the list
+    const requests = config.requests ?? config.ignoreRequests;
+    const normalized = {
+        ignoreRequests: requests !== undefined ? mapToRequests(requests) : [],
+    } as NormalizedConfig;
+    // getConfig().requests keeps working, and { ...getConfig() } skips it
+    Object.defineProperty(normalized, 'requests', {
+        get(this: NormalizedConfig) {
+            return this.ignoreRequests;
+        },
+        set(this: NormalizedConfig, value: NormalizedRequest[]) {
+            this.ignoreRequests = value;
+        },
+        enumerable: false,
+    });
+    return normalized;
 };
 
 export const mapToRequests = (
@@ -324,7 +344,7 @@ export const isRequestExcluded = (
     request: RequestSession,
     config: NormalizedConfig
 ): boolean => {
-    return config.requests.some((configRequest: NormalizedRequest) => {
+    return config.ignoreRequests.some((configRequest: NormalizedRequest) => {
         const urlMatch = configRequest.url
             ? new RegExp(configRequest.url).test(request.url)
             : true;

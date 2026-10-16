@@ -5,7 +5,7 @@ import failOnNetworkError, {
 } from '../../dist/index';
 
 const config: Config = {
-    requests: [
+    ignoreRequests: [
         'excludedUrl',
         { url: /xhr/, method: 'GET', status: 428 },
         { status: 430 },
@@ -17,10 +17,10 @@ const { getConfig, setConfig, waitForRequests } = failOnNetworkError(config);
 
 Cypress.Commands.addAll({
     getConfigRequests: () => {
-        return cy.wrap(getConfig().requests);
+        return cy.wrap(getConfig().ignoreRequests);
     },
     setConfigRequests: (requests: (string | RequestMatcher)[]) => {
-        setConfig({ ...getConfig(), requests });
+        setConfig({ ...getConfig(), ignoreRequests: requests });
     },
     waitForRequests: (timeout?: number) => waitForRequests(timeout),
     // make a request from the page without waiting for the response

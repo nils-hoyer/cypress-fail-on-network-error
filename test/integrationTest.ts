@@ -31,7 +31,7 @@ const errorChecks: Record<string, (error: string) => void> = {
     'shouldNormalizeAndValidateConfig > should fail when an entry has an unknown key':
         (error) =>
             expect(error).to.match(
-                /^Error: cypress-fail-on-network-error: config\.requests\[0\] has unknown keys/
+                /^Error: cypress-fail-on-network-error: config\.ignoreRequests\[0\] has unknown keys/
             ),
     'shouldCheckOnlyXhrAndFetch > should fail on the XHR but not report the script, stylesheet and image':
         (error) => {
