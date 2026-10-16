@@ -16,22 +16,18 @@ npm install cypress-fail-on-network-error --save-dev
 
 ## Usage
 
-Call `failOnNetworkError()` in your support file, `cypress/support/e2e.js` or `cypress/support/e2e.ts`:
+Call `failOnNetworkError()` in your support file, `cypress/support/e2e.ts`:
 
-```js
+```ts
 import failOnNetworkError from 'cypress-fail-on-network-error';
 
 failOnNetworkError({
-    // don't fail on successful responses
+    // fail on error responses
     ignoreRequests: [{ status: { from: 200, to: 399 } }],
 });
 ```
 
-Call it once. A later call, for example in a spec or a `beforeEach`, replaces the earlier one and logs a warning to the browser console.
-
-Every XHR and `fetch` request is checked, whatever its status, so without the entry above a `200` fails the test too. Page loads from `cy.visit()` and scripts, stylesheets and images are not checked. Neither are requests that the browser cancels, because the page aborted them (`AbortController`, `xhr.abort()`) or navigated away.
-
-When a request gets a response, or fails without one, and no entry in `ignoreRequests` matches it, the test fails at the end of the current command. The error starts with `cypress-fail-on-network-error:` and lists each such request on a line of its own, such as `GET http://localhost:3000/api/cart → 500`, or the error instead of the status for a request without a response. Each one is also logged to the command log as `unexpected`:
+A request that no entry in `ignoreRequests` matches fails the test and is logged to the command log:
 
 ![An unexpected request in the Cypress command log and the failed test's error](./docs/commandLog.png)
 
@@ -98,8 +94,6 @@ it('should tolerate an unavailable recommendations service', () => {
 | `cy.deleteIgnoredRequests(['foo'])`        | Removes equal entries from `ignoreRequests`, in any form: `'foo'` removes `{ url: 'foo' }`, and a predicate only the same function. |
 | `cy.waitForRequests(timeout)`              | Waits for pending requests, see [below](#wait-for-pending-requests). |
 
-The package declares the commands for TypeScript. `cy.getIgnoredRequests()` yields each entry normalized: a string becomes `{ url }`, a function `{ predicate }`, a number in `status` becomes `{ from, to }`, and `method` is upper case.
-
 To change other options, use `getConfig()` and `setConfig()`, which `failOnNetworkError()` returns. `setConfig()` accepts every form of entry:
 
 ```ts
@@ -120,8 +114,6 @@ it('should check every request the page makes', () => {
 ```
 
 `cy.waitForRequests(timeout = 10000)` waits until every request of the current test has a response or has failed. It checks every 500 ms, starting 500 ms after the command runs, so it also sees requests the page has just made. When the timeout passes first, the test continues without an error.
-
-It does not wait for requests that were pending when the page unloaded, such as after `cy.visit()` to another page; a response that still arrives is checked. Electron and Firefox report nothing for a request that the page aborts, so `waitForRequests` waits for it until the timeout.
 
 ## Debugging
 
