@@ -27,6 +27,8 @@ failOnNetworkError({
 });
 ```
 
+Call it once. A later call, for example in a spec or a `beforeEach`, replaces the earlier one and logs a warning to the browser console.
+
 Every XHR and `fetch` request is checked, whatever its status, so without the entry above a `200` fails the test too. Page loads from `cy.visit()` and scripts, stylesheets and images are not checked. Neither are requests that the browser cancels, because the page aborted them (`AbortController`, `xhr.abort()`) or navigated away.
 
 When a request gets a response, or fails without one, and no entry in `ignoreRequests` matches it, the test fails with an error that starts with `cypress-fail-on-network-error:` and lists the requests of the current test:
@@ -95,7 +97,7 @@ For TypeScript, see the command declarations in this repository's [support file]
 
 ## Wait for pending requests
 
-A response that arrives after the test's last command is not checked. To check slow requests too, wrap `waitForRequests()` in a command. Take it from the same `failOnNetworkError()` call as `getConfig()` and `setConfig()`, because each call registers its own listeners.
+A response that arrives after the test's last command is not checked. To check slow requests too, wrap `waitForRequests()` in a command. Take it from the same `failOnNetworkError()` call as `getConfig()` and `setConfig()`.
 
 ```ts
 const { getConfig, setConfig, waitForRequests } = failOnNetworkError(config);
