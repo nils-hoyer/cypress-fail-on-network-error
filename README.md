@@ -21,13 +21,10 @@ Call `failOnNetworkError()` in your support file, `cypress/support/e2e.ts`:
 ```ts
 import failOnNetworkError from 'cypress-fail-on-network-error';
 
-failOnNetworkError({
-    // fail on error responses
-    ignoreRequests: [{ status: { from: 200, to: 399 } }],
-});
+failOnNetworkError();
 ```
 
-A request that no entry in `ignoreRequests` matches fails the test and is logged to the command log:
+An XHR or `fetch` request fails the test when it gets an error response (`400` or higher) or no response at all. It is logged to the command log:
 
 ![An unexpected request in the Cypress command log and the failed test's error](./docs/commandLog.png)
 
@@ -35,7 +32,7 @@ A request that no entry in `ignoreRequests` matches fails the test and is logged
 
 | Option           | Default | Description |
 | ---------------- | ------- | ----------- |
-| `ignoreRequests` | `[]`    | Requests that don't fail a test, as `string` (shorthand for `{ url }`), `{ url, method, status, predicate }`, or a function (shorthand for `{ predicate }`). A request that matches any entry is excluded. |
+| `ignoreRequests` | `[{ status: { from: 100, to: 399 } }]` | Requests that don't fail a test, as `string` (shorthand for `{ url }`), `{ url, method, status, predicate }`, or a function (shorthand for `{ predicate }`). A request that matches any entry is excluded. Your list replaces the default, so keep its entry to ignore successful responses, or use `[]` to fail on every request. |
 | `debug` | `false` | Also logs each request that `ignoreRequests` ignores, with the entry that matched it. See [Debugging](#debugging). |
 
 ```ts
@@ -43,7 +40,7 @@ import failOnNetworkError, { Config } from 'cypress-fail-on-network-error';
 
 const config: Config = {
     ignoreRequests: [
-        { status: { from: 200, to: 399 } },
+        { status: { from: 100, to: 399 } }, // keep the default
         'analytics', // any request whose URL contains "analytics"
         { url: /\/api\/feature-flags/, method: 'GET', status: 404 },
         { method: 'POST', status: 409 }, // a 409 from any POST request
@@ -89,7 +86,7 @@ it('should tolerate an unavailable recommendations service', () => {
 | Command                                    | Description |
 | ------------------------------------------ | ----------- |
 | `cy.getIgnoredRequests()`                  | Yields `ignoreRequests`. |
-| `cy.setIgnoredRequests(['foo', { url: /bar/ }])`    | Replaces `ignoreRequests`. |
+| `cy.setIgnoredRequests(['foo', { url: /bar/ }])`    | Replaces `ignoreRequests`, including the default entry. |
 | `cy.addIgnoredRequests([{ status: 404 }])` | Adds to `ignoreRequests`. |
 | `cy.deleteIgnoredRequests(['foo'])`        | Removes equal entries from `ignoreRequests`, in any form: `'foo'` removes `{ url: 'foo' }`, and a predicate only the same function. |
 | `cy.waitForRequests(timeout)`              | Waits for pending requests, see [below](#wait-for-pending-requests). |

@@ -964,6 +964,101 @@ describe('types', () => {
     });
 });
 
+describe('default ignoreRequests', () => {
+    const defaultEntry = {
+        url: undefined,
+        method: undefined,
+        status: { from: 100, to: 399 },
+        predicate: undefined,
+    };
+
+    const respond = (status: number) => {
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', status);
+    };
+
+    [{}, { ignoreRequests: undefined }, { debug: true }].forEach(
+        (config: Config) => {
+            it(`WHEN config is ${JSON.stringify(config)} THEN expect getConfig() to ignore statuses 100 to 399`, () => {
+                const { getConfig } = failOnNetworkError(config);
+
+                chai.expect(getConfig().ignoreRequests).to.deep.equal([
+                    defaultEntry,
+                ]);
+            });
+        }
+    );
+
+    [200, 204, 302, 399].forEach((status) => {
+        it(`WHEN config has no ignoreRequests and a response is ${status} THEN expect no error`, () => {
+            failOnNetworkError();
+
+            respond(status);
+
+            chai.expect(commandEnd).to.not.throw();
+        });
+    });
+
+    [400, 404, 500].forEach((status) => {
+        it(`WHEN config has no ignoreRequests and a response is ${status} THEN expect assertion error`, () => {
+            failOnNetworkError();
+
+            respond(status);
+
+            chai.expect(commandEnd).to.throw(AssertionError);
+        });
+    });
+
+    it('WHEN config has no ignoreRequests and a request fails without a response THEN expect assertion error', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        requestError('1', 'socket hang up');
+
+        chai.expect(commandEnd).to.throw(AssertionError);
+    });
+
+    it('WHEN config sets ignoreRequests THEN expect it to replace the default', () => {
+        const { getConfig } = failOnNetworkError({ ignoreRequests: ['bar'] });
+
+        respond(200);
+
+        chai.expect(commandEnd).to.throw(AssertionError);
+        chai.expect(getConfig().ignoreRequests).to.deep.equal(
+            mapToRequests(['bar'])
+        );
+    });
+
+    it('WHEN config sets ignoreRequests to [] THEN expect every request to fail', () => {
+        failOnNetworkError({ ignoreRequests: [] });
+
+        respond(200);
+
+        chai.expect(commandEnd).to.throw(AssertionError);
+    });
+
+    it('WHEN setConfig changes debug THEN expect the default entry to stay', () => {
+        const { getConfig, setConfig } = failOnNetworkError();
+
+        setConfig({ ...getConfig(), debug: true });
+
+        chai.expect(getConfig().ignoreRequests).to.deep.equal([defaultEntry]);
+    });
+
+    it('WHEN the default entry is changed in getConfig() THEN expect the next test and a later call to get the default', () => {
+        const { getConfig } = failOnNetworkError();
+
+        getConfig().ignoreRequests[0].status!.to = 599;
+        testAfterRun();
+        chai.expect(getConfig().ignoreRequests).to.deep.equal([defaultEntry]);
+
+        getConfig().ignoreRequests[0].status!.to = 599;
+        chai.expect(createConfig({}).ignoreRequests).to.deep.equal([
+            defaultEntry,
+        ]);
+    });
+});
+
 describe('getConfig()', () => {
     // the plugin matches against normalized entries, where a string would
     // exclude every request and a numeric status none

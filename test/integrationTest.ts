@@ -44,6 +44,12 @@ const errorChecks: Record<string, (error: string) => void> = {
             expect(error).to.match(
                 /^Error: cypress-fail-on-network-error: config\.requests was renamed to ignoreRequests/
             ),
+    'shouldFailOnlyOnErrorsByDefault > should fail on a 4xx response': (
+        error
+    ) => expect(error).to.match(/^GET http:\/\/\S+\/xhr\?status=404 → 404$/m),
+    'shouldFailOnlyOnErrorsByDefault > should fail on a 5xx response': (
+        error
+    ) => expect(error).to.match(/^GET http:\/\/\S+\/xhr\?status=500 → 500$/m),
     'shouldMatchPredicates > should fail with an Error when a predicate throws':
         (error) =>
             expect(error).to.match(
