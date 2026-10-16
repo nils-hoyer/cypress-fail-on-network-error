@@ -3,14 +3,20 @@ import { AssertionError } from 'chai';
 const prefix = 'cypress-fail-on-network-error:';
 
 export type Config = {
-    requests?: (string | Request)[];
+    requests?: (string | RequestMatcher)[];
 };
 
-export interface Request {
+export interface RequestMatcher {
     url?: string | RegExp;
     method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
     status?: number | Range;
 }
+
+/**
+ * @deprecated Use `RequestMatcher`. `Request` hides the built-in fetch
+ * `Request` type in files that import it.
+ */
+export type Request = RequestMatcher;
 
 export type Range = {
     from: number;
@@ -21,7 +27,7 @@ export type Range = {
 // and the method upper case
 export type NormalizedRequest = {
     url?: string | RegExp;
-    method?: Request['method'];
+    method?: RequestMatcher['method'];
     status?: Range;
 };
 
@@ -277,9 +283,9 @@ export const createConfig = (config: Config): NormalizedConfig => {
 };
 
 export const mapToRequests = (
-    _unknowns: (string | Request)[]
+    _unknowns: (string | RequestMatcher)[]
 ): NormalizedRequest[] =>
-    _unknowns.map((unknown: string | Request) => {
+    _unknowns.map((unknown: string | RequestMatcher) => {
         if (typeof unknown !== 'string') {
             let status: Range | undefined = undefined;
 
@@ -294,7 +300,7 @@ export const mapToRequests = (
             return {
                 url: unknown.url,
                 // the event reports methods in upper case
-                method: unknown.method?.toUpperCase() as Request['method'],
+                method: unknown.method?.toUpperCase() as RequestMatcher['method'],
                 status,
             };
         }

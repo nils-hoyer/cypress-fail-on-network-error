@@ -1,7 +1,7 @@
 import failOnNetworkError, {
     Config,
     NormalizedRequest,
-    Request,
+    RequestMatcher,
 } from '../../dist/index';
 
 const config: Config = {
@@ -19,7 +19,7 @@ Cypress.Commands.addAll({
     getConfigRequests: () => {
         return cy.wrap(getConfig().requests);
     },
-    setConfigRequests: (requests: (string | Request)[]) => {
+    setConfigRequests: (requests: (string | RequestMatcher)[]) => {
         setConfig({ ...getConfig(), requests });
     },
     waitForRequests: (timeout?: number) => waitForRequests(timeout),
@@ -43,7 +43,9 @@ declare global {
     namespace Cypress {
         interface Chainable {
             getConfigRequests(): Chainable<NormalizedRequest[]>;
-            setConfigRequests(requests: (string | Request)[]): Chainable<void>;
+            setConfigRequests(
+                requests: (string | RequestMatcher)[]
+            ): Chainable<void>;
             waitForRequests(timeout?: number): Chainable<void>;
             fetch(url: string, init?: RequestInit): Chainable<void>;
             xhr(url: string, method?: string): Chainable<void>;
