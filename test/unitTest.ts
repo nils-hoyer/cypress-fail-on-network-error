@@ -1,5 +1,4 @@
 import * as chai from 'chai';
-import { AssertionError } from 'chai';
 import { readFileSync } from 'fs';
 import { minimatch } from 'minimatch';
 import * as index from './../dist/index.js';
@@ -18,6 +17,14 @@ import {
     mapToRequests,
     validateConfig,
 } from './../dist/internal.js';
+
+// a failing request throws an Error named AssertionError, like chai's, which
+// the plugin does not export; to.throw(AssertionError) checks for it
+class AssertionError {
+    static [Symbol.hasInstance](error: unknown): boolean {
+        return error instanceof Error && error.name === 'AssertionError';
+    }
+}
 
 type Listener = (...args: any[]) => unknown;
 let listeners: Record<string, Listener[]> = {};
@@ -165,12 +172,19 @@ describe('dist/index.js', () => {
         ].map((match) => match[1]);
 
     // the plugin is bundled into every user's support file
-    it('WHEN the plugin is built THEN expect it to import only chai and its helpers', () => {
+    it('WHEN the plugin is built THEN expect it to import only its helpers', () => {
         chai.expect(importsOf('dist/index.js')).to.deep.equal([
-            'chai',
             './internal.js',
         ]);
         chai.expect(importsOf('dist/internal.js')).to.deep.equal([]);
+    });
+
+    it('WHEN the package is installed THEN expect no runtime dependencies', () => {
+        const { dependencies } = JSON.parse(
+            readFileSync('package.json', 'utf8')
+        );
+
+        chai.expect(dependencies ?? {}).to.be.empty;
     });
 
     // the helpers are in dist/internal.js, which the exports map does not list
@@ -179,6 +193,29 @@ describe('dist/index.js', () => {
             'addIgnoredRequestsCommands',
             'default',
         ]);
+    });
+});
+
+describe('failure error', () => {
+    // Cypress shows it as "AssertionError: …", as with chai's before 2.0
+    it("WHEN a request fails THEN expect an Error named AssertionError that is not chai's", () => {
+        failOnNetworkError();
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 500);
+
+        let error: unknown;
+        try {
+            commandEnd();
+        } catch (thrown) {
+            error = thrown;
+        }
+
+        chai.expect(error).to.be.instanceOf(Error);
+        chai.expect(error).to.not.be.instanceOf(chai.AssertionError);
+        chai.expect(String(error)).to.equal(
+            'AssertionError: cypress-fail-on-network-error:\nGET http://foo → 500'
+        );
+        chai.expect(error).to.have.property('name', 'AssertionError');
     });
 });
 
