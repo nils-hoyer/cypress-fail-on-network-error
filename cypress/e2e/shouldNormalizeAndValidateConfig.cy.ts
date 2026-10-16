@@ -1,4 +1,4 @@
-import { Request } from '../../dist/index';
+import { RequestMatcher } from '../../dist/index';
 
 describe('shouldNormalizeAndValidateConfig', () => {
     beforeEach(() => {
@@ -7,7 +7,7 @@ describe('shouldNormalizeAndValidateConfig', () => {
 
     it('should pass when a lower-case method matches the request', () => {
         cy.setConfigRequests([
-            { url: /xhr/, method: 'get' } as unknown as Request,
+            { url: /xhr/, method: 'get' } as unknown as RequestMatcher,
         ]);
         cy.xhr('/xhr?status=500');
         cy.waitForRequests();
@@ -21,6 +21,6 @@ describe('shouldNormalizeAndValidateConfig', () => {
     });
 
     it('should fail when an entry has an unknown key', () => {
-        cy.setConfigRequests([{ stauts: 500 } as unknown as Request]);
+        cy.setConfigRequests([{ stauts: 500 } as unknown as RequestMatcher]);
     });
 });

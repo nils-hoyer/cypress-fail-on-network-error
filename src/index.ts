@@ -3,29 +3,57 @@ import { AssertionError } from 'chai';
 const prefix = 'cypress-fail-on-network-error:';
 
 export type Config = {
-    requests?: (string | Request)[];
+    ignoreRequests?: (string | RequestMatcher | RequestPredicate)[];
+    /** @deprecated Use `ignoreRequests`. When both are set, `requests` wins. */
+    requests?: (string | RequestMatcher | RequestPredicate)[];
 };
 
-export interface Request {
+// the common methods, for autocompletion; any other method works too
+export type Method =
+    | 'GET'
+    | 'POST'
+    | 'PUT'
+    | 'DELETE'
+    | 'PATCH'
+    | 'HEAD'
+    | 'OPTIONS'
+    | (string & {});
+
+export interface RequestMatcher {
     url?: string | RegExp;
-    method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+    // a list matches any of its methods
+    method?: Method | Method[];
     status?: number | Range;
+    // excludes the request when it returns true
+    predicate?: RequestPredicate;
 }
+
+// an entry of its own is shorthand for { predicate }
+export type RequestPredicate = (request: RequestSession) => boolean;
+
+/**
+ * @deprecated Use `RequestMatcher`. `Request` hides the built-in fetch
+ * `Request` type in files that import it.
+ */
+export type Request = RequestMatcher;
 
 export type Range = {
     from: number;
     to: number;
 };
 
-// an entry as getConfig() returns it: a string is { url }, a status a range
-// and the method upper case
+// an entry as getConfig() returns it: a string is { url }, a function
+// { predicate }, a status a range and the method upper case
 export type NormalizedRequest = {
     url?: string | RegExp;
-    method?: Request['method'];
+    method?: RequestMatcher['method'];
     status?: Range;
+    predicate?: RequestPredicate;
 };
 
 export type NormalizedConfig = {
+    ignoreRequests: NormalizedRequest[];
+    /** @deprecated Use `ignoreRequests`, which this reads and sets. */
     requests: NormalizedRequest[];
 };
 
@@ -35,6 +63,8 @@ export default function failOnNetworkError(_config: Config = {}) {
     let requests: RequestSession[] = [];
     // set when a request matched no entry, until the next command:end throws
     let requestFailed = false;
+    // set when a predicate threw, until the next command:end throws
+    let predicateError: Error | undefined;
 
     const getRequests = () => requests;
 
@@ -115,13 +145,17 @@ export default function failOnNetworkError(_config: Config = {}) {
                   };
         });
 
-        if (
-            !isRequestExcluded(
-                findRequest(requests, event.requestId) as RequestSession,
-                getConfig()
-            )
-        ) {
-            requestFailed = true;
+        const request = findRequest(
+            requests,
+            event.requestId
+        ) as RequestSession;
+        try {
+            if (!isRequestExcluded(request, getConfig())) requestFailed = true;
+        } catch (error) {
+            // a broken predicate is a mistake in the config, not a failed check
+            predicateError = invalid(
+                `a predicate in ignoreRequests threw on ${request.method} ${request.url}: ${error instanceof Error ? error.message : String(error)}`
+            );
         }
     });
 
@@ -129,6 +163,11 @@ export default function failOnNetworkError(_config: Config = {}) {
     // a thrown error is an uncaught exception that uncaught:exception handlers
     // can hide. command:end runs inside the queue and fails the command.
     Cypress.on('command:end', () => {
+        if (predicateError !== undefined) {
+            const error = predicateError;
+            predicateError = undefined;
+            throw error;
+        }
         if (!requestFailed) return;
         requestFailed = false;
         throw new AssertionError(`${prefix}\n${JSON.stringify(requests)}`);
@@ -149,6 +188,7 @@ export default function failOnNetworkError(_config: Config = {}) {
         setConfig(originConfig);
         requests = [];
         requestFailed = false;
+        predicateError = undefined;
     });
 
     return {
@@ -158,8 +198,9 @@ export default function failOnNetworkError(_config: Config = {}) {
     };
 }
 
-const configKeys = ['requests'];
-const requestKeys = ['url', 'method', 'status'];
+// requests is the deprecated name of ignoreRequests
+const configKeys = ['ignoreRequests', 'requests'];
+const requestKeys = ['url', 'method', 'status', 'predicate'];
 
 // a broken config is not a failed check, so it throws an Error, not an AssertionError
 const invalid = (message: string) => new Error(`${prefix} ${message}`);
@@ -185,24 +226,30 @@ export const validateConfig = (config: Config): void => {
     );
     if (unknownConfigKeys.length > 0)
         throw invalid(
-            `config has unknown keys ${unknownConfigKeys.join(', ')}, use requests`
+            `config has unknown keys ${unknownConfigKeys.join(', ')}, use ignoreRequests`
         );
-    expectType(
-        config.requests,
-        ['Array', 'undefined'],
-        'config.requests must be an array'
-    );
+    // errors name the key the user passed
+    validateRequests(config.ignoreRequests, 'config.ignoreRequests');
+    validateRequests(config.requests, 'config.requests');
+};
 
-    config.requests?.forEach((_request: unknown, index: number) => {
-        const name = `config.requests[${index}]`;
+const validateRequests = (requests: unknown, key: string): void => {
+    expectType(requests, ['Array', 'undefined'], `${key} must be an array`);
+
+    (requests as unknown[] | undefined)?.forEach((_request, index) => {
+        const name = `${key}[${index}]`;
         expectType(
             _request,
-            ['string', 'Object'],
-            `${name} must be a string or an object`
+            ['string', 'Object', 'function'],
+            `${name} must be a string, an object or a function`
         );
 
         const request = (
-            typeof _request === 'string' ? { url: _request } : _request
+            typeof _request === 'string'
+                ? { url: _request }
+                : typeof _request === 'function'
+                  ? { predicate: _request }
+                  : _request
         ) as Record<string, unknown>;
 
         const unknownKeys = Object.keys(request).filter(
@@ -210,7 +257,7 @@ export const validateConfig = (config: Config): void => {
         );
         if (unknownKeys.length > 0)
             throw invalid(
-                `${name} has unknown keys ${unknownKeys.join(', ')}, use url, method or status`
+                `${name} has unknown keys ${unknownKeys.join(', ')}, use url, method, status or predicate`
             );
         // an empty url is ignored when matching, like an omitted one
         const setKeys = requestKeys.filter(
@@ -218,7 +265,7 @@ export const validateConfig = (config: Config): void => {
         );
         if (setKeys.length === 0)
             throw invalid(
-                `${name} must set url, method or status, or it excludes every request`
+                `${name} must set url, method, status or predicate, or it excludes every request`
             );
 
         expectType(
@@ -244,10 +291,31 @@ export const validateConfig = (config: Config): void => {
             }
         }
         expectType(
-            request.method,
-            ['string', 'undefined'],
-            `${name}.method must be a string`
+            request.predicate,
+            ['function', 'undefined'],
+            `${name}.predicate must be a function`
         );
+        expectType(
+            request.method,
+            ['string', 'Array', 'undefined'],
+            `${name}.method must be a string or an array of strings`
+        );
+        if (Array.isArray(request.method)) {
+            // an empty list, or an empty method in it, matches no request
+            if (request.method.length === 0)
+                throw invalid(`${name}.method must not be an empty array`);
+            request.method.forEach((method: unknown, methodIndex: number) => {
+                expectType(
+                    method,
+                    ['string'],
+                    `${name}.method[${methodIndex}] must be a string`
+                );
+                if (method === '')
+                    throw invalid(
+                        `${name}.method[${methodIndex}] must not be empty`
+                    );
+            });
+        }
         expectType(
             request.status,
             ['Object', 'number', 'undefined'],
@@ -270,16 +338,38 @@ export const validateConfig = (config: Config): void => {
 };
 
 export const createConfig = (config: Config): NormalizedConfig => {
-    return {
-        requests:
-            config.requests !== undefined ? mapToRequests(config.requests) : [],
-    };
+    // requests, the old name, wins when both are set, so that
+    // setConfig({ ...getConfig(), requests }) from older code replaces the list
+    const requests = config.requests ?? config.ignoreRequests;
+    const normalized = {
+        ignoreRequests: requests !== undefined ? mapToRequests(requests) : [],
+    } as NormalizedConfig;
+    // getConfig().requests keeps working, and { ...getConfig() } skips it
+    Object.defineProperty(normalized, 'requests', {
+        get(this: NormalizedConfig) {
+            return this.ignoreRequests;
+        },
+        set(this: NormalizedConfig, value: NormalizedRequest[]) {
+            this.ignoreRequests = value;
+        },
+        enumerable: false,
+    });
+    return normalized;
 };
 
 export const mapToRequests = (
-    _unknowns: (string | Request)[]
+    _unknowns: (string | RequestMatcher | RequestPredicate)[]
 ): NormalizedRequest[] =>
-    _unknowns.map((unknown: string | Request) => {
+    _unknowns.map((unknown: string | RequestMatcher | RequestPredicate) => {
+        if (typeof unknown === 'function') {
+            return {
+                url: undefined,
+                method: undefined,
+                status: undefined,
+                predicate: unknown,
+            };
+        }
+
         if (typeof unknown !== 'string') {
             let status: Range | undefined = undefined;
 
@@ -293,9 +383,9 @@ export const mapToRequests = (
 
             return {
                 url: unknown.url,
-                // the event reports methods in upper case
-                method: unknown.method?.toUpperCase() as Request['method'],
+                method: upperCaseMethod(unknown.method),
                 status,
+                predicate: unknown.predicate,
             };
         }
 
@@ -303,8 +393,20 @@ export const mapToRequests = (
             url: unknown,
             method: undefined,
             status: undefined,
+            predicate: undefined,
         };
     });
+
+// matched against the request's method in upper case
+const upperCaseMethod = (
+    method: Method | Method[] | undefined
+): Method | Method[] | undefined =>
+    Array.isArray(method)
+        ? method.map((each) => each.toUpperCase())
+        : method?.toUpperCase();
+
+const toArray = <T>(value: T | T[]): T[] =>
+    Array.isArray(value) ? value : [value];
 
 export const findRequest = (
     requests: RequestSession[],
@@ -318,7 +420,7 @@ export const isRequestExcluded = (
     request: RequestSession,
     config: NormalizedConfig
 ): boolean => {
-    return config.requests.some((configRequest: NormalizedRequest) => {
+    return config.ignoreRequests.some((configRequest: NormalizedRequest) => {
         const urlMatch = configRequest.url
             ? new RegExp(configRequest.url).test(request.url)
             : true;
@@ -329,9 +431,16 @@ export const isRequestExcluded = (
             : true;
         // browsers upper-case only the standard methods, so fetch keeps 'patch'
         const methodMatch = configRequest.method
-            ? configRequest.method === request.method.toUpperCase()
+            ? toArray(configRequest.method).indexOf(
+                  request.method.toUpperCase()
+              ) !== -1
             : true;
-        return urlMatch && statusMatch && methodMatch;
+        if (!(urlMatch && statusMatch && methodMatch)) return false;
+        // called only when the other fields match, with a copy, so it cannot
+        // change the tracked request
+        return configRequest.predicate
+            ? Boolean(configRequest.predicate({ ...request }))
+            : true;
     });
 };
 

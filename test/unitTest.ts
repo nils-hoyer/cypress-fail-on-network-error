@@ -4,6 +4,7 @@ import { readFileSync } from 'fs';
 import failOnNetworkError, {
     type Config,
     type Request,
+    type RequestMatcher,
     type RequestSession,
     createConfig,
     isRequestExcluded,
@@ -108,7 +109,7 @@ beforeEach(() => {
 describe('failOnNetworkError()', () => {
     it('WHEN failOnNetworkError is created with Config THEN expect no error', () => {
         const config: Config = {
-            requests: ['foo'],
+            ignoreRequests: ['foo'],
         };
         failOnNetworkError(config);
     });
@@ -152,7 +153,7 @@ describe('request:event handler', () => {
     };
 
     it('WHEN response is excluded THEN expect no error', () => {
-        failOnNetworkError({ requests: [{ url: 'foo', status: 200 }] });
+        failOnNetworkError({ ignoreRequests: [{ url: 'foo', status: 200 }] });
 
         incomingRequest('1', 'GET', 'http://foo');
 
@@ -160,7 +161,7 @@ describe('request:event handler', () => {
     });
 
     it('WHEN response matches no entry THEN expect assertion error with prefix at command:end', () => {
-        failOnNetworkError({ requests: [{ url: 'foo', status: 200 }] });
+        failOnNetworkError({ ignoreRequests: [{ url: 'foo', status: 200 }] });
 
         incomingRequest('1', 'GET', 'http://foo');
 
@@ -168,7 +169,7 @@ describe('request:event handler', () => {
     });
 
     it('WHEN request error matches no entry THEN expect assertion error with prefix at command:end', () => {
-        failOnNetworkError({ requests: [{ status: 200 }] });
+        failOnNetworkError({ ignoreRequests: [{ status: 200 }] });
 
         incomingRequest('1', 'GET', 'http://foo');
 
@@ -255,7 +256,7 @@ describe('request:event handler', () => {
         expectNoFailure(() => responseReceived('1', 500));
     });
 
-    [{}, { requests: ['foo'] }].forEach((config: Config) => {
+    [{}, { ignoreRequests: ['foo'] }].forEach((config: Config) => {
         it(`WHEN request error belongs to a request from before test:after:run with config ${JSON.stringify(config)} THEN expect it to be ignored`, () => {
             failOnNetworkError(config);
 
@@ -288,6 +289,60 @@ describe('request:event handler', () => {
         });
     });
 
+    it('WHEN a predicate throws THEN expect a plain Error naming the request at command:end', () => {
+        failOnNetworkError({
+            ignoreRequests: [
+                () => {
+                    throw new Error('predicate broke');
+                },
+            ],
+        });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        chai.expect(() => responseReceived('1', 500)).to.not.throw();
+
+        chai.expect(commandEnd)
+            .to.throw(Error)
+            .with.property('constructor', Error);
+        chai.expect(commandEnd).to.not.throw();
+    });
+
+    it('WHEN a predicate throws THEN expect the message to name the request and the error', () => {
+        failOnNetworkError({
+            ignoreRequests: [
+                () => {
+                    throw new Error('predicate broke');
+                },
+            ],
+        });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 500);
+
+        chai.expect(commandEnd)
+            .to.throw()
+            .with.property('message')
+            .that.matches(/^cypress-fail-on-network-error:/)
+            .and.contains('GET http://foo')
+            .and.contains('predicate broke');
+    });
+
+    it('WHEN a predicate threw after the last command THEN expect test:after:run to drop it', () => {
+        failOnNetworkError({
+            ignoreRequests: [
+                () => {
+                    throw new Error('predicate broke');
+                },
+            ],
+        });
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 500);
+        testAfterRun();
+
+        chai.expect(commandEnd).to.not.throw();
+    });
+
     it('WHEN event is not a request event THEN expect it to be ignored', () => {
         failOnNetworkError();
 
@@ -303,7 +358,9 @@ describe('waitForRequests()', function () {
     this.timeout(5000);
 
     it('WHEN request failed without a response THEN expect it to resolve at the first check', async () => {
-        const { waitForRequests } = failOnNetworkError({ requests: ['foo'] });
+        const { waitForRequests } = failOnNetworkError({
+            ignoreRequests: ['foo'],
+        });
 
         incomingRequest('1', 'GET', 'http://foo');
         requestError('1', 'socket hang up');
@@ -339,7 +396,9 @@ describe('waitForRequests()', function () {
     });
 
     it('WHEN no request was made THEN expect it to resolve at the first check', async () => {
-        const { waitForRequests } = failOnNetworkError({ requests: ['foo'] });
+        const { waitForRequests } = failOnNetworkError({
+            ignoreRequests: ['foo'],
+        });
 
         waitForRequests(2000);
 
@@ -349,7 +408,9 @@ describe('waitForRequests()', function () {
     });
 
     it('WHEN request arrives just after the command starts THEN expect it to wait for that request', async () => {
-        const { waitForRequests } = failOnNetworkError({ requests: ['foo'] });
+        const { waitForRequests } = failOnNetworkError({
+            ignoreRequests: ['foo'],
+        });
 
         waitForRequests(3000);
         // the plugin learns about a request a few ms after cy.visit resolves
@@ -362,7 +423,9 @@ describe('waitForRequests()', function () {
     });
 
     it('WHEN request is still pending at the timeout THEN expect it to resolve without failing', async () => {
-        const { waitForRequests } = failOnNetworkError({ requests: ['foo'] });
+        const { waitForRequests } = failOnNetworkError({
+            ignoreRequests: ['foo'],
+        });
 
         incomingRequest('1', 'GET', 'http://foo');
         waitForRequests(1200);
@@ -373,7 +436,9 @@ describe('waitForRequests()', function () {
     });
 
     it('WHEN request is made after waitForRequests is called THEN expect it to wait for that request', async () => {
-        const { waitForRequests } = failOnNetworkError({ requests: ['foo'] });
+        const { waitForRequests } = failOnNetworkError({
+            ignoreRequests: ['foo'],
+        });
 
         waitForRequests(2000);
         incomingRequest('1', 'GET', 'http://foo');
@@ -388,37 +453,70 @@ describe('waitForRequests()', function () {
 describe('test:after:run handler', () => {
     it('WHEN config was changed during a test THEN expect original config after test:after:run', () => {
         const { getConfig, setConfig } = failOnNetworkError({
-            requests: ['foo'],
+            ignoreRequests: ['foo'],
         });
 
-        setConfig({ requests: ['bar'] });
+        setConfig({ ignoreRequests: ['bar'] });
         testAfterRun();
 
         chai.expect(getConfig()).to.deep.equal(
-            createConfig({ requests: ['foo'] })
+            createConfig({ ignoreRequests: ['foo'] })
         );
     });
 
-    it('WHEN requests were added to getConfig() during a test THEN expect them gone after test:after:run', () => {
-        const { getConfig } = failOnNetworkError({ requests: ['foo'] });
+    it('WHEN entries were added to getConfig() during a test THEN expect them gone after test:after:run', () => {
+        const { getConfig } = failOnNetworkError({ ignoreRequests: ['foo'] });
 
-        getConfig().requests.push({ url: 'bar' });
+        getConfig().ignoreRequests.push({ url: 'bar' });
         testAfterRun();
 
         chai.expect(getConfig()).to.deep.equal(
-            createConfig({ requests: ['foo'] })
+            createConfig({ ignoreRequests: ['foo'] })
         );
     });
 
     it('WHEN an entry of getConfig() was changed during a test THEN expect the original entry after test:after:run', () => {
-        const { getConfig } = failOnNetworkError({ requests: ['foo'] });
+        const { getConfig } = failOnNetworkError({ ignoreRequests: ['foo'] });
 
-        getConfig().requests[0].url = 'bar';
+        getConfig().ignoreRequests[0].url = 'bar';
         testAfterRun();
 
         chai.expect(getConfig()).to.deep.equal(
-            createConfig({ requests: ['foo'] })
+            createConfig({ ignoreRequests: ['foo'] })
         );
+    });
+});
+
+describe('types', () => {
+    it('WHEN an entry is typed with the deprecated Request alias THEN expect it to compile as a RequestMatcher', () => {
+        const entry: Request = { url: 'foo', method: 'GET', status: 500 };
+        const matcher: RequestMatcher = entry;
+        const config: Config = { ignoreRequests: [entry, matcher] };
+
+        chai.expect(() => validateConfig(config)).to.not.throw();
+    });
+    it('WHEN an entry is a function or sets predicate THEN expect it to compile', () => {
+        const config: Config = {
+            ignoreRequests: [
+                (request) => request.status === 404,
+                { method: 'POST', predicate: (request) => !request.error },
+            ],
+        };
+
+        chai.expect(() => validateConfig(config)).to.not.throw();
+    });
+
+    it('WHEN method is any string or a list of methods THEN expect it to compile', () => {
+        const config: Config = {
+            ignoreRequests: [
+                { method: 'HEAD' },
+                { method: 'OPTIONS' },
+                { method: 'PURGE' },
+                { method: ['GET', 'POST'] },
+            ],
+        };
+
+        chai.expect(() => validateConfig(config)).to.not.throw();
     });
 });
 
@@ -426,26 +524,110 @@ describe('getConfig()', () => {
     // the plugin matches against normalized entries, where a string would
     // exclude every request and a numeric status none
     it('WHEN a string or a numeric status is added to getConfig() THEN expect a type error', () => {
-        const { getConfig } = failOnNetworkError({ requests: ['foo'] });
+        const { getConfig } = failOnNetworkError({ ignoreRequests: ['foo'] });
 
         // @ts-expect-error a string entry is not normalized to { url }
-        getConfig().requests.push('bar');
+        getConfig().ignoreRequests.push('bar');
         // @ts-expect-error a numeric status is not normalized to a range
-        getConfig().requests.push({ status: 500 });
+        getConfig().ignoreRequests.push({ status: 500 });
     });
 
     it('WHEN config is created THEN expect getConfig() to return normalized entries', () => {
         const { getConfig } = failOnNetworkError({
-            requests: [
+            ignoreRequests: [
                 'foo',
-                { method: 'get', status: 500 } as unknown as Request,
+                { method: 'get', status: 500 } as unknown as RequestMatcher,
             ],
         });
 
-        chai.expect(getConfig().requests).to.deep.equal([
-            { url: 'foo', method: undefined, status: undefined },
-            { url: undefined, method: 'GET', status: { from: 500, to: 500 } },
+        chai.expect(getConfig().ignoreRequests).to.deep.equal([
+            {
+                url: 'foo',
+                method: undefined,
+                status: undefined,
+                predicate: undefined,
+            },
+            {
+                url: undefined,
+                method: 'GET',
+                status: { from: 500, to: 500 },
+                predicate: undefined,
+            },
         ]);
+    });
+});
+
+describe('deprecated requests option', () => {
+    it('WHEN config sets requests THEN expect its entries in ignoreRequests', () => {
+        const { getConfig } = failOnNetworkError({ requests: ['foo'] });
+
+        chai.expect(getConfig()).to.deep.equal(
+            createConfig({ ignoreRequests: ['foo'] })
+        );
+    });
+
+    it('WHEN config sets requests THEN expect matching requests to be excluded', () => {
+        failOnNetworkError({ requests: ['foo'] });
+
+        incomingRequest('1', 'GET', 'http://foo');
+
+        chai.expect(() => responseReceived('1', 500)).to.not.throw();
+        chai.expect(commandEnd).to.not.throw();
+    });
+
+    it('WHEN config sets requests and ignoreRequests THEN expect requests to win', () => {
+        chai.expect(
+            createConfig({ ignoreRequests: ['foo'], requests: ['bar'] })
+                .ignoreRequests
+        ).to.deep.equal(mapToRequests(['bar']));
+    });
+
+    it('WHEN requests is undefined next to ignoreRequests THEN expect ignoreRequests', () => {
+        chai.expect(
+            createConfig({ ignoreRequests: ['foo'], requests: undefined })
+                .ignoreRequests
+        ).to.deep.equal(mapToRequests(['foo']));
+    });
+
+    it('WHEN older code calls setConfig({ ...getConfig(), requests }) THEN expect the list replaced', () => {
+        const { getConfig, setConfig } = failOnNetworkError({
+            ignoreRequests: ['foo'],
+        });
+
+        setConfig({ ...getConfig(), requests: ['bar'] });
+
+        chai.expect(getConfig().ignoreRequests).to.deep.equal(
+            mapToRequests(['bar'])
+        );
+    });
+
+    it('WHEN getConfig().requests is read THEN expect the ignoreRequests array', () => {
+        const { getConfig } = failOnNetworkError({ ignoreRequests: ['foo'] });
+
+        chai.expect(getConfig().requests).to.equal(getConfig().ignoreRequests);
+    });
+
+    it('WHEN getConfig().requests is assigned THEN expect ignoreRequests replaced', () => {
+        const { getConfig } = failOnNetworkError({ ignoreRequests: ['foo'] });
+
+        getConfig().requests = [{ url: 'bar' }];
+
+        chai.expect(getConfig().ignoreRequests).to.deep.equal([{ url: 'bar' }]);
+    });
+
+    it('WHEN getConfig() is spread THEN expect only ignoreRequests to be copied', () => {
+        const { getConfig } = failOnNetworkError({ ignoreRequests: ['foo'] });
+
+        chai.expect(Object.keys({ ...getConfig() })).to.deep.equal([
+            'ignoreRequests',
+        ]);
+    });
+
+    it('WHEN an entry of requests is invalid THEN expect error naming config.requests', () => {
+        chai.expect(() => validateConfig({ requests: ['foo', 42] } as Config))
+            .to.throw(Error)
+            .with.property('message')
+            .that.contains('config.requests[1]');
     });
 });
 
@@ -466,25 +648,25 @@ describe('validateConfig()', () => {
 
     it('WHEN config is invalid status type THEN expect error', () => {
         expectInvalid(
-            { requests: [{ url: 'url', status: '400', method: 'GET' }] },
-            'config.requests[0].status'
+            { ignoreRequests: [{ url: 'url', status: '400', method: 'GET' }] },
+            'config.ignoreRequests[0].status'
         );
     });
 
     it('WHEN config is invalid status object THEN expect error', () => {
         expectInvalid(
             {
-                requests: [
+                ignoreRequests: [
                     { url: 'url', status: { from: 200 }, method: 'GET' },
                 ],
             },
-            'config.requests[0].status.to'
+            'config.ignoreRequests[0].status.to'
         );
     });
 
     it('WHEN config is valid THEN expect no error', () => {
         const config: Config = {
-            requests: [
+            ignoreRequests: [
                 'url',
                 { url: 'url', status: 200, method: 'GET' },
                 { url: 'url', status: { from: 200, to: 299 }, method: 'GET' },
@@ -503,8 +685,8 @@ describe('validateConfig()', () => {
     [
         [{ request: ['foo'] }, "{ request: ['foo'] }"],
         [
-            { requests: ['foo'], request: undefined },
-            "{ requests: ['foo'], request: undefined }",
+            { ignoreRequests: ['foo'], request: undefined },
+            "{ ignoreRequests: ['foo'], request: undefined }",
         ],
     ].forEach(([config, title]) => {
         it(`WHEN config ${title} has an unknown key THEN expect error naming the key`, () => {
@@ -512,21 +694,27 @@ describe('validateConfig()', () => {
         });
     });
 
-    it('WHEN requests is undefined THEN expect no error', () => {
+    it('WHEN ignoreRequests is undefined THEN expect no error', () => {
         chai.expect(() =>
-            validateConfig({ requests: undefined })
+            validateConfig({ ignoreRequests: undefined })
         ).to.not.throw();
     });
 
     ['foo', {}, null].forEach((requests) => {
-        it(`WHEN requests is ${JSON.stringify(requests)} THEN expect error naming config.requests`, () => {
-            expectInvalid({ requests }, 'config.requests');
+        it(`WHEN ignoreRequests is ${JSON.stringify(requests)} THEN expect error naming config.ignoreRequests`, () => {
+            expectInvalid(
+                { ignoreRequests: requests },
+                'config.ignoreRequests'
+            );
         });
     });
 
     [42, /foo/, null, ['foo']].forEach((entry) => {
         it(`WHEN entry is ${String(entry)} THEN expect error naming the entry`, () => {
-            expectInvalid({ requests: ['foo', entry] }, 'config.requests[1]');
+            expectInvalid(
+                { ignoreRequests: ['foo', entry] },
+                'config.ignoreRequests[1]'
+            );
         });
     });
 
@@ -537,14 +725,17 @@ describe('validateConfig()', () => {
         ['', "''"],
     ].forEach(([entry, title]) => {
         it(`WHEN entry ${title} sets none of url, method or status THEN expect error naming the entry`, () => {
-            expectInvalid({ requests: ['foo', entry] }, 'config.requests[1]');
+            expectInvalid(
+                { ignoreRequests: ['foo', entry] },
+                'config.ignoreRequests[1]'
+            );
         });
     });
 
     [{ stauts: 404 }, { url: 'foo', stauts: 404 }].forEach((entry) => {
         it(`WHEN entry ${JSON.stringify(entry)} has an unknown key THEN expect error naming the entry and key`, () => {
-            const config = { requests: ['foo', entry] };
-            expectInvalid(config, 'config.requests[1]');
+            const config = { ignoreRequests: ['foo', entry] };
+            expectInvalid(config, 'config.ignoreRequests[1]');
             expectInvalid(config, 'stauts');
         });
     });
@@ -558,21 +749,37 @@ describe('validateConfig()', () => {
     ].forEach(([entry, title]) => {
         it(`WHEN url of entry ${title} is an empty RegExp THEN expect error naming the entry and key`, () => {
             expectInvalid(
-                { requests: ['foo', entry] },
-                'config.requests[1].url'
+                { ignoreRequests: ['foo', entry] },
+                'config.ignoreRequests[1].url'
             );
         });
     });
 
+    it('WHEN entry sets only predicate THEN expect no error', () => {
+        chai.expect(() =>
+            validateConfig({ ignoreRequests: [{ predicate: () => true }] })
+        ).to.not.throw();
+    });
+
+    it('WHEN predicate is not a function THEN expect error naming the entry and key', () => {
+        expectInvalid(
+            { ignoreRequests: ['foo', { predicate: true }] },
+            'config.ignoreRequests[1].predicate'
+        );
+    });
+
     it('WHEN url is a RegExp that is not empty but matches every URL THEN expect no error', () => {
         chai.expect(() =>
-            validateConfig({ requests: [{ url: /.*/ }] })
+            validateConfig({ ignoreRequests: [{ url: /.*/ }] })
         ).to.not.throw();
     });
 
     ['(', { url: '[a-' }].forEach((entry) => {
         it(`WHEN url ${JSON.stringify(entry)} is not a valid regular expression THEN expect error naming the entry`, () => {
-            expectInvalid({ requests: ['foo', entry] }, 'config.requests[1]');
+            expectInvalid(
+                { ignoreRequests: ['foo', entry] },
+                'config.ignoreRequests[1]'
+            );
         });
     });
 
@@ -585,8 +792,8 @@ describe('validateConfig()', () => {
         const key = Object.keys(entry)[0];
         it(`WHEN entry ${JSON.stringify(entry)} has an invalid ${key} THEN expect error naming the entry and key`, () => {
             expectInvalid(
-                { requests: ['foo', entry] },
-                `config.requests[1].${key}`
+                { ignoreRequests: ['foo', entry] },
+                `config.ignoreRequests[1].${key}`
             );
         });
     });
@@ -594,23 +801,32 @@ describe('validateConfig()', () => {
     [
         [null, 'config must be an object, got null'],
         [['foo'], 'config must be an object, got Array'],
-        [{ requests: {} }, 'config.requests must be an array, got Object'],
-        [{ requests: [42] }, 'must be a string or an object, got number'],
-        [{ requests: [/foo/] }, 'must be a string or an object, got RegExp'],
         [
-            { requests: [{ url: () => true }] },
+            { ignoreRequests: {} },
+            'config.ignoreRequests must be an array, got Object',
+        ],
+        [
+            { ignoreRequests: [42] },
+            'must be a string, an object or a function, got number',
+        ],
+        [
+            { ignoreRequests: [/foo/] },
+            'must be a string, an object or a function, got RegExp',
+        ],
+        [
+            { ignoreRequests: [{ url: () => true }] },
             '.url must be a string or a RegExp, got function',
         ],
         [
-            { requests: [{ status: new Date() }] },
+            { ignoreRequests: [{ status: new Date() }] },
             '.status must be a number or a { from, to } range, got Date',
         ],
         [
-            { requests: [{ status: { from: 200, to: '299' } }] },
+            { ignoreRequests: [{ status: { from: 200, to: '299' } }] },
             '.status.to must be a number, got string',
         ],
         [
-            { requests: [{ status: { from: undefined, to: 299 } }] },
+            { ignoreRequests: [{ status: { from: undefined, to: 299 } }] },
             '.status.from must be a number, got undefined',
         ],
     ].forEach(([config, message]) => {
@@ -622,9 +838,32 @@ describe('validateConfig()', () => {
         });
     });
 
+    [
+        [{ method: [] }, '{ method: [] }', 'config.ignoreRequests[1].method'],
+        [
+            { method: ['GET', 42] },
+            "{ method: ['GET', 42] }",
+            'config.ignoreRequests[1].method[1]',
+        ],
+        [
+            { method: ['GET', ''] },
+            "{ method: ['GET', ''] }",
+            'config.ignoreRequests[1].method[1]',
+        ],
+        [{ method: {} }, '{ method: {} }', 'config.ignoreRequests[1].method'],
+    ].forEach(([entry, title, name]) => {
+        it(`WHEN entry ${title} has an invalid method THEN expect error naming ${name}`, () => {
+            expectInvalid({ ignoreRequests: ['foo', entry] }, name as string);
+        });
+    });
+
     it('WHEN config is normalized by createConfig THEN expect no error', () => {
         const config = createConfig({
-            requests: ['foo', { method: 'GET' }, { url: /foo/, status: 200 }],
+            ignoreRequests: [
+                'foo',
+                { method: 'GET' },
+                { url: /foo/, status: 200 },
+            ],
         });
 
         chai.expect(() => validateConfig(config)).to.not.throw();
@@ -632,30 +871,78 @@ describe('validateConfig()', () => {
 });
 
 describe('mapToRequests()', () => {
-    it('WHEN mapToRequests is called THEN expect Request object array', () => {
+    it('WHEN mapToRequests is called THEN expect normalized entries', () => {
         const requests = [
             'url1',
             { url: 'url2', status: 400, method: 'GET' },
             { method: 'GET' },
             { status: { from: 200, to: 399 } },
-        ] as (string | Request)[];
+        ] as (string | RequestMatcher)[];
 
         const mappedRequests = mapToRequests(requests);
         chai.expect(mappedRequests).to.deep.equal([
-            { url: 'url1', status: undefined, method: undefined },
-            { url: 'url2', status: { from: 400, to: 400 }, method: 'GET' },
-            { url: undefined, status: undefined, method: 'GET' },
+            {
+                url: 'url1',
+                status: undefined,
+                method: undefined,
+                predicate: undefined,
+            },
+            {
+                url: 'url2',
+                status: { from: 400, to: 400 },
+                method: 'GET',
+                predicate: undefined,
+            },
+            {
+                url: undefined,
+                status: undefined,
+                method: 'GET',
+                predicate: undefined,
+            },
             {
                 url: undefined,
                 status: { from: 200, to: 399 },
                 method: undefined,
+                predicate: undefined,
             },
         ]);
     });
     it('WHEN method is lower case THEN expect it upper-cased', () => {
         chai.expect(
-            mapToRequests([{ method: 'get' } as unknown as Request])
-        ).to.deep.equal([{ url: undefined, status: undefined, method: 'GET' }]);
+            mapToRequests([{ method: 'get' } as unknown as RequestMatcher])
+        ).to.deep.equal([
+            {
+                url: undefined,
+                status: undefined,
+                method: 'GET',
+                predicate: undefined,
+            },
+        ]);
+    });
+    it('WHEN entry is a function THEN expect it as predicate', () => {
+        const predicate = () => true;
+
+        chai.expect(mapToRequests([predicate])).to.deep.equal([
+            {
+                url: undefined,
+                method: undefined,
+                status: undefined,
+                predicate,
+            },
+        ]);
+    });
+
+    it('WHEN method is a list THEN expect each method upper-cased', () => {
+        chai.expect(
+            mapToRequests([{ method: ['get', 'Purge'] }])
+        ).to.deep.equal([
+            {
+                url: undefined,
+                status: undefined,
+                method: ['GET', 'PURGE'],
+                predicate: undefined,
+            },
+        ]);
     });
     it('WHEN status range is reversed THEN expect from and to swapped', () => {
         chai.expect(
@@ -665,6 +952,7 @@ describe('mapToRequests()', () => {
                 url: undefined,
                 status: { from: 200, to: 399 },
                 method: undefined,
+                predicate: undefined,
             },
         ]);
     });
@@ -673,7 +961,7 @@ describe('mapToRequests()', () => {
 describe('isRequestExcluded()', () => {
     it('WHEN request is excluded THEN expect true', () => {
         const config = createConfig({
-            requests: [{ url: 'foo', status: 400, method: 'GET' }],
+            ignoreRequests: [{ url: 'foo', status: 400, method: 'GET' }],
         });
         const request: RequestSession = {
             requestId: '1',
@@ -685,7 +973,7 @@ describe('isRequestExcluded()', () => {
     });
     it('WHEN request is not excluded THEN expect false', () => {
         const config = createConfig({
-            requests: [{ url: 'foo', status: 200, method: 'POST' }],
+            ignoreRequests: [{ url: 'foo', status: 200, method: 'POST' }],
         });
         const request: RequestSession = {
             requestId: '1',
@@ -697,7 +985,7 @@ describe('isRequestExcluded()', () => {
     });
     it('WHEN request method is lower case THEN expect it to match the upper-case entry', () => {
         // browsers upper-case only the standard methods, so fetch keeps 'patch'
-        const config = createConfig({ requests: [{ method: 'PATCH' }] });
+        const config = createConfig({ ignoreRequests: [{ method: 'PATCH' }] });
         const request: RequestSession = {
             requestId: '1',
             method: 'patch',
@@ -707,9 +995,86 @@ describe('isRequestExcluded()', () => {
         chai.expect(isRequestExcluded(request, config)).to.be.true;
     });
 
+    [
+        [{ method: 'HEAD' }, 'HEAD', true],
+        [{ method: 'OPTIONS' }, 'OPTIONS', true],
+        // browsers keep a custom method's case
+        [{ method: 'PURGE' }, 'purge', true],
+        [{ method: ['GET', 'PUT'] }, 'PUT', true],
+        [{ method: ['GET', 'PUT'] }, 'POST', false],
+    ].forEach(([entry, method, expected]) => {
+        it(`WHEN entry is ${JSON.stringify(entry)} and request method is ${method} THEN expect ${expected}`, () => {
+            const config = createConfig({
+                ignoreRequests: [entry as RequestMatcher],
+            });
+            const request: RequestSession = {
+                requestId: '1',
+                method: method as string,
+                url: 'http://foo',
+                status: 500,
+            };
+            chai.expect(isRequestExcluded(request, config)).to.equal(expected);
+        });
+    });
+
+    describe('WHEN entry has a predicate', () => {
+        const request: RequestSession = {
+            requestId: '1',
+            method: 'GET',
+            url: 'http://foo',
+            status: 404,
+        };
+
+        [true, false].forEach((result) => {
+            it(`WHEN the predicate returns ${result} THEN expect ${result}`, () => {
+                const config = createConfig({ ignoreRequests: [() => result] });
+
+                chai.expect(isRequestExcluded(request, config)).to.equal(
+                    result
+                );
+            });
+        });
+
+        it('WHEN the predicate is called THEN expect it to get a copy of the request', () => {
+            let received: RequestSession | undefined;
+            const config = createConfig({
+                ignoreRequests: [
+                    (request) => {
+                        received = request;
+                        request.status = 200;
+                        return false;
+                    },
+                ],
+            });
+
+            isRequestExcluded(request, config);
+
+            chai.expect(received).to.deep.equal({ ...request, status: 200 });
+            chai.expect(request.status).to.equal(404);
+        });
+
+        it('WHEN the other fields of its entry do not match THEN expect the predicate not to be called', () => {
+            let called = false;
+            const config = createConfig({
+                ignoreRequests: [
+                    {
+                        status: 500,
+                        predicate: () => {
+                            called = true;
+                            return true;
+                        },
+                    },
+                ],
+            });
+
+            chai.expect(isRequestExcluded(request, config)).to.be.false;
+            chai.expect(called).to.be.false;
+        });
+    });
+
     describe('WHEN config has status range 200 to 399', () => {
         const config = createConfig({
-            requests: [{ status: { from: 200, to: 399 } }],
+            ignoreRequests: [{ status: { from: 200, to: 399 } }],
         });
         const requestWithStatus = (status?: number): RequestSession => ({
             requestId: '1',
@@ -742,7 +1107,7 @@ describe('isRequestExcluded()', () => {
 
     it('WHEN status range is reversed THEN expect statuses inside it to be excluded', () => {
         const config = createConfig({
-            requests: [{ status: { from: 399, to: 200 } }],
+            ignoreRequests: [{ status: { from: 399, to: 200 } }],
         });
         const request: RequestSession = {
             requestId: '1',

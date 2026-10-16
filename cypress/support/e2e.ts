@@ -1,11 +1,12 @@
 import failOnNetworkError, {
     Config,
     NormalizedRequest,
-    Request,
+    RequestMatcher,
+    RequestPredicate,
 } from '../../dist/index';
 
 const config: Config = {
-    requests: [
+    ignoreRequests: [
         'excludedUrl',
         { url: /xhr/, method: 'GET', status: 428 },
         { status: 430 },
@@ -17,10 +18,12 @@ const { getConfig, setConfig, waitForRequests } = failOnNetworkError(config);
 
 Cypress.Commands.addAll({
     getConfigRequests: () => {
-        return cy.wrap(getConfig().requests);
+        return cy.wrap(getConfig().ignoreRequests);
     },
-    setConfigRequests: (requests: (string | Request)[]) => {
-        setConfig({ ...getConfig(), requests });
+    setConfigRequests: (
+        requests: (string | RequestMatcher | RequestPredicate)[]
+    ) => {
+        setConfig({ ...getConfig(), ignoreRequests: requests });
     },
     waitForRequests: (timeout?: number) => waitForRequests(timeout),
     // make a request from the page without waiting for the response
@@ -43,7 +46,9 @@ declare global {
     namespace Cypress {
         interface Chainable {
             getConfigRequests(): Chainable<NormalizedRequest[]>;
-            setConfigRequests(requests: (string | Request)[]): Chainable<void>;
+            setConfigRequests(
+                requests: (string | RequestMatcher | RequestPredicate)[]
+            ): Chainable<void>;
             waitForRequests(timeout?: number): Chainable<void>;
             fetch(url: string, init?: RequestInit): Chainable<void>;
             xhr(url: string, method?: string): Chainable<void>;
