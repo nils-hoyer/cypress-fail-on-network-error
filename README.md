@@ -6,7 +6,19 @@
 
 Fail Cypress tests when the application under test makes a network request you did not expect, such as an API call that returns a `500`.
 
+You set it up once, in your support file, and from then on every test checks every XHR and `fetch` request the page makes, not only the ones a test waits for. That catches failures the page hides: an error the app catches and swallows, a background call such as autosave or polling, data shown from a cache or a fallback, or a third-party script, such as analytics or a chat widget, whose calls fail. In each case the page looks fine and the test's assertions pass, so the failure would go unnoticed.
+
 To fail tests on `console.error()` calls, see [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
+
+## Why not Cypress's own checks
+
+Cypress shows every request in the command log, but fails a test only for the requests you check:
+
+- `cy.visit()` and `cy.request()` fail on an error status, but only for the page itself or the request they make, not for the requests the page makes.
+- `cy.intercept()` with `cy.wait('@alias')` checks a request that a test names. A request that no test names, or that a later change to the app adds, goes unchecked.
+- An error the app does not catch fails the test, but most apps catch failed requests and show a message, retry, or do nothing.
+
+This plugin checks every request in every test from one place, and a new endpoint is covered without a change to the tests. Scripts, stylesheets and images are not checked.
 
 ## Installation
 
