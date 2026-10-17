@@ -6,7 +6,9 @@
 
 Fail Cypress tests when the application under test makes a network request you did not expect, such as an API call that returns a `500`.
 
-You set it up once, in your support file, and from then on every test checks every XHR and `fetch` request the page makes, not only the ones a test waits for. That catches failures the page hides: an error the app catches and swallows, a background call such as autosave or polling, data shown from a cache or a fallback, or a third-party script, such as analytics or a chat widget, whose calls fail. In each case the page looks fine and the test's assertions pass, so the failure would go unnoticed.
+- **Set up once, checks every test.** One call in your support file checks every XHR and `fetch` request in every test, not only the ones a test waits for.
+- **Catches failures the page hides.** An error the app swallows, a background call such as autosave or polling, data shown from a cache or a fallback, or a failing call from a third-party script, such as analytics or a chat widget. The page looks fine and the test's assertions pass, so these failures would go unnoticed.
+- **Covers new endpoints on its own.** A request that a later change to the app adds is checked without a change to the tests.
 
 To fail tests on `console.error()` calls, see [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
 
@@ -18,7 +20,7 @@ Cypress shows every request in the command log, but fails a test only for the re
 - `cy.intercept()` with `cy.wait('@alias')` checks a request that a test names. A request that no test names, or that a later change to the app adds, goes unchecked.
 - An error the app does not catch fails the test, but most apps catch failed requests and show a message, retry, or do nothing.
 
-This plugin checks every request in every test from one place, and a new endpoint is covered without a change to the tests. Scripts, stylesheets and images are not checked.
+This plugin checks XHR and `fetch` requests only. Scripts, stylesheets and images are not checked.
 
 ## Installation
 
