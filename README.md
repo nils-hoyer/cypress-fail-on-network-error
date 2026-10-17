@@ -4,7 +4,7 @@
 [![CI](https://github.com/nils-hoyer/cypress-fail-on-network-error/actions/workflows/ci.yml/badge.svg)](https://github.com/nils-hoyer/cypress-fail-on-network-error/actions/workflows/ci.yml)
 [![Sponsor](https://img.shields.io/github/sponsors/nils-hoyer?label=Sponsor&logo=GitHub)](https://github.com/sponsors/nils-hoyer)
 
-Fail Cypress tests when the application under test makes a network request you did not expect, such as an API call that returns a `500`.
+Fail Cypress tests when the application under test makes a network request you did not expect, such as an API call that returns a `500`. Set up once in your support file, it checks every XHR and `fetch` request in every test, including failed calls that your app or third-party scripts swallow, which Cypress doesn't fail on.
 
 To fail tests on `console.error()` calls, see [cypress-fail-on-console-error](https://www.npmjs.com/package/cypress-fail-on-console-error).
 
