@@ -70,21 +70,6 @@ const requestError = (requestId: string, message: string) =>
         error: { message },
     });
 
-// the times Cypress sends with incoming:request, in ms since the epoch
-const incomingRequestAt = (
-    requestId: string,
-    timestamps: {
-        cdpRequestWillBeSentTimestamp?: number;
-        proxyRequestReceivedTimestamp?: number;
-    }
-) =>
-    emit('request:event', 'incoming:request', {
-        requestId,
-        method: 'GET',
-        url: 'http://foo',
-        ...timestamps,
-    });
-
 // the message Chrome reports when the page aborts a request or navigates away
 const requestCancelled = (requestId: string) =>
     requestError(
@@ -93,6 +78,12 @@ const requestCancelled = (requestId: string) =>
     );
 
 const windowUnload = () => emit('window:unload');
+
+const windowBeforeLoad = () => emit('window:before:load');
+
+// Cypress.config('testIsolation') in the stub; Cypress 16 defaults to true,
+// the tests to off, so a request needs no page load first
+let testIsolation: boolean | undefined;
 
 const testAfterRun = () => emit('test:after:run');
 
@@ -139,7 +130,11 @@ const runCommands = async () => {
 beforeEach(() => {
     listeners = {};
     logs = [];
+    testIsolation = undefined;
     (globalThis as any).Cypress = {
+        testingType: 'e2e',
+        config: (key: string) =>
+            key === 'testIsolation' ? testIsolation : undefined,
         on: (eventName: string, listener: Listener) => {
             (listeners[eventName] ??= []).push(listener);
         },
@@ -456,58 +451,96 @@ describe('request:event handler', () => {
         expectNoFailure(() => requestError('1-retry-1', 'socket hang up'));
     });
 
-    it('WHEN a request arrives after test:after:run but started before it THEN expect it to be ignored', () => {
+    it('WHEN a retry follows a failure that was already reported THEN expect it not to be reported again', () => {
         failOnNetworkError();
 
-        const startedAt = Date.now() - 50;
-        testAfterRun();
-        incomingRequestAt('1', { proxyRequestReceivedTimestamp: startedAt });
+        incomingRequest('1', 'GET', 'http://foo');
+        expectFailureAtCommandEnd(() => requestError('1', 'socket hang up'));
+        incomingRequest('1-retry-1', 'GET', 'http://foo');
 
-        expectNoFailure(() => requestError('1', 'socket hang up'));
+        expectNoFailure(() => requestError('1-retry-1', 'socket hang up'));
     });
 
-    it('WHEN the browser sent a request before test:after:run that the proxy received after it THEN expect it to be ignored', () => {
+    it('WHEN an earlier attempt fails after its retry started THEN expect it not to change the retry', () => {
         failOnNetworkError();
 
-        const startedAt = Date.now() - 50;
-        testAfterRun();
-        incomingRequestAt('1', {
-            cdpRequestWillBeSentTimestamp: startedAt,
-            proxyRequestReceivedTimestamp: Date.now() + 5,
+        incomingRequest('1', 'GET', 'http://foo');
+        incomingRequest('1-retry-1', 'GET', 'http://foo');
+        requestError('1', 'socket hang up');
+
+        expectNoFailure(() => responseReceived('1-retry-1', 200));
+    });
+
+    it('WHEN a request was cancelled by a page unload THEN expect its retry not to be tracked', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        windowUnload();
+        incomingRequest('1-retry-1', 'GET', 'http://foo');
+
+        expectNoFailure(() => requestError('1-retry-1', 'socket hang up'));
+    });
+
+    describe('WHEN tests are isolated', () => {
+        beforeEach(() => {
+            testIsolation = true;
         });
+
+        it('WHEN a request arrives after test:after:run, before a page loads THEN expect it to be ignored', () => {
+            failOnNetworkError();
+
+            windowBeforeLoad();
+            testAfterRun();
+            incomingRequest('1', 'GET', 'http://foo');
+
+            expectNoFailure(() => requestError('1', 'socket hang up'));
+        });
+
+        it('WHEN a request arrives before the first page of the spec loads THEN expect it to be ignored', () => {
+            failOnNetworkError();
+
+            incomingRequest('1', 'GET', 'http://foo');
+
+            expectNoFailure(() => responseReceived('1', 500));
+        });
+
+        it('WHEN a request arrives after a page loads THEN expect it to be checked', () => {
+            failOnNetworkError();
+
+            testAfterRun();
+            windowBeforeLoad();
+            incomingRequest('1', 'GET', 'http://foo');
+
+            expectFailureAtCommandEnd(() => responseReceived('1', 500));
+        });
+
+        it('WHEN testing components THEN expect a request to be checked without a page load', () => {
+            (globalThis as any).Cypress.testingType = 'component';
+            failOnNetworkError();
+
+            testAfterRun();
+            incomingRequest('1', 'GET', 'http://foo');
+
+            expectFailureAtCommandEnd(() => responseReceived('1', 500));
+        });
+    });
+
+    it('WHEN tests are not isolated THEN expect a request after test:after:run to be checked without a page load', () => {
+        testIsolation = false;
+        failOnNetworkError();
+
+        testAfterRun();
+        incomingRequest('1', 'GET', 'http://foo');
+
+        expectFailureAtCommandEnd(() => responseReceived('1', 500));
+    });
+
+    it('WHEN an entry is a RegExp THEN expect a matching request to be ignored', () => {
+        failOnNetworkError({ ignoreRequests: [/status=500/] });
+
+        incomingRequest('1', 'GET', 'http://foo/xhr?status=500');
 
         expectNoFailure(() => responseReceived('1', 500));
-    });
-
-    it('WHEN a request started after test:after:run THEN expect it to be checked', () => {
-        failOnNetworkError();
-
-        testAfterRun();
-        // Firefox sends 0 for the browser's time
-        incomingRequestAt('1', {
-            cdpRequestWillBeSentTimestamp: 0,
-            proxyRequestReceivedTimestamp: Date.now() + 5,
-        });
-
-        expectFailureAtCommandEnd(() => responseReceived('1', 500));
-    });
-
-    it('WHEN a request started before the first test ended THEN expect it to be checked', () => {
-        failOnNetworkError();
-
-        incomingRequestAt('1', { proxyRequestReceivedTimestamp: Date.now() });
-
-        expectFailureAtCommandEnd(() => responseReceived('1', 500));
-    });
-
-    it('WHEN the start time is far from now THEN expect it to be checked', () => {
-        failOnNetworkError();
-
-        testAfterRun();
-        // a clock that does not count ms since the epoch
-        incomingRequestAt('1', { cdpRequestWillBeSentTimestamp: 12345 });
-
-        expectFailureAtCommandEnd(() => responseReceived('1', 500));
     });
 
     it('WHEN page unloads with a request pending THEN expect a later response to be checked', () => {
@@ -905,6 +938,17 @@ describe('addIgnoredRequestsCommands()', () => {
         ).to.deep.equal(['{ url: /foo/ }', '{ predicate: function }']);
     });
 
+    it('WHEN RegExp entries are added and deleted THEN expect them to match like { url }', () => {
+        const { getConfig } = register({ ignoreRequests: ['foo'] });
+
+        customCommands.addIgnoredRequests([/bar/, { url: /baz/ }]);
+        customCommands.deleteIgnoredRequests([{ url: /bar/ }, /baz/]);
+
+        chai.expect(
+            getConfig().ignoreRequests.map((entry) => entryToString(entry))
+        ).to.deep.equal(["{ url: 'foo' }"]);
+    });
+
     it('WHEN deleteIgnoredRequests gets an invalid entry THEN expect a plain Error', () => {
         register({ ignoreRequests: ['foo'] });
 
@@ -1092,15 +1136,27 @@ describe('waitForRequests()', function () {
         chai.expect(logs[0]).to.include({
             name: 'pending',
             displayName: 'pending',
-            message: 'GET http://foo/\\* had no response after 600 ms',
+            message:
+                'GET http://foo/\\* was still pending when the wait timed out after 600 ms',
         });
         chai.expect(logs[0].consoleProps()).to.deep.equal({
             Request: 'GET http://foo/*',
             Timeout: 600,
         });
         chai.expect(logs[1].message).to.equal(
-            'POST http://bar had no response after 600 ms'
+            'POST http://bar was still pending when the wait timed out after 600 ms'
         );
+    });
+
+    it('WHEN a request was cancelled THEN expect it not to be logged as pending', async () => {
+        const { waitForRequests } = failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        requestCancelled('1');
+        waitForRequests(600);
+
+        await runCommands();
+        chai.expect(logs).to.be.empty;
     });
 
     it('WHEN every request is done before the timeout THEN expect nothing to be logged', async () => {

@@ -14,7 +14,6 @@ import {
     lowerCaseNames,
     mapToRequests,
     prefix,
-    requestStartTime,
     requestToString,
     validateConfig,
     waitUntil,
@@ -77,8 +76,20 @@ export default function failOnNetworkError(_config: Config = {}) {
     let checkedRequests: CheckedRequest[] = [];
     // set when a predicate threw, until the next command:end throws
     let predicateError: Error | undefined;
-    // when the last test:after:run cleared the requests
-    let previousTestEndedAt: number | undefined;
+    // the id of each tracked request's current attempt, by its id without
+    // the -retry-N suffix that Cypress's proxy adds to retries
+    let attempts: Record<string, string> = {};
+    // requests that failed the test at command:end; their retries are not
+    // tracked, so each failure is reported once
+    let reportedIds: string[] = [];
+
+    // test isolation resets the page between tests, so until a test loads a
+    // page, a request comes from the page of an earlier test, whose
+    // incoming:request arrived late. Without isolation the page stays.
+    const isolatesTests = () =>
+        Cypress.testingType === 'e2e' &&
+        Cypress.config('testIsolation') === true;
+    let awaitingPageLoad = isolatesTests();
 
     const getRequests = () => requests;
 
@@ -126,15 +137,7 @@ export default function failOnNetworkError(_config: Config = {}) {
             const checkedResourceTypes = ['xhr', 'fetch', undefined];
             if (checkedResourceTypes.indexOf(event.resourceType) === -1) return;
 
-            // the page made the request before the previous test ended, and
-            // test isolation reset the page, but the event arrived late
-            const startedAt = requestStartTime(event);
-            if (
-                startedAt !== undefined &&
-                previousTestEndedAt !== undefined &&
-                startedAt < previousTestEndedAt
-            )
-                return;
+            if (awaitingPageLoad) return;
 
             const requestId = baseRequestId(event.requestId);
             const request: RequestSession = {
@@ -145,9 +148,17 @@ export default function failOnNetworkError(_config: Config = {}) {
                 status: undefined,
             };
             if (isRetry(event.requestId)) {
-                // a retry of a request that is not tracked is not tracked either
-                if (findRequest(requests, requestId) === undefined) return;
+                const tracked = findRequest(requests, requestId);
+                // a retry of a request that is not tracked, was cancelled or
+                // already failed the test is not tracked either
+                if (
+                    tracked === undefined ||
+                    tracked.cancelled === true ||
+                    reportedIds.indexOf(requestId) !== -1
+                )
+                    return;
                 // the earlier attempt's error is replaced by this one's result
+                attempts[requestId] = event.requestId;
                 requests = requests.map((each: RequestSession) =>
                     each.requestId === requestId ? request : each
                 );
@@ -156,14 +167,16 @@ export default function failOnNetworkError(_config: Config = {}) {
                 );
                 return;
             }
+            attempts[requestId] = event.requestId;
             requests.push(request);
             return;
         }
 
         const subscribedEvents = ['request:error', 'response:received'];
         const requestId = baseRequestId(event.requestId);
-        // a request from an earlier test was cleared by test:after:run
-        const unknownRequest = findRequest(requests, requestId) === undefined;
+        // a request from an earlier test was cleared by test:after:run, and
+        // an event of an earlier attempt must not change the current one
+        const unknownRequest = attempts[requestId] !== event.requestId;
 
         if (subscribedEvents.indexOf(eventName) === -1 || unknownRequest)
             return;
@@ -226,9 +239,18 @@ export default function failOnNetworkError(_config: Config = {}) {
         }
         const failed = checked.filter(({ ignoredBy }) => !ignoredBy);
         if (failed.length === 0) return;
+        reportedIds = [
+            ...reportedIds,
+            ...failed.map(({ request }) => request.requestId),
+        ];
         throw new AssertionError(
             `${prefix}\n${failed.map(({ request }) => requestToString(request)).join('\n')}`
         );
+    });
+
+    Cypress.on('window:before:load', () => {
+        if (!isActive()) return;
+        awaitingPageLoad = false;
     });
 
     // Electron and Firefox send no event for a request that the browser
@@ -246,8 +268,10 @@ export default function failOnNetworkError(_config: Config = {}) {
     Cypress.on('test:after:run', () => {
         if (!isActive()) return;
         setConfig(originConfig);
-        previousTestEndedAt = Date.now();
+        awaitingPageLoad = isolatesTests();
         requests = [];
+        attempts = {};
+        reportedIds = [];
         checkedRequests = [];
         predicateError = undefined;
     });

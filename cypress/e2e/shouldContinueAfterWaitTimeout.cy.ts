@@ -11,7 +11,9 @@ describe('shouldContinueAfterWaitTimeout', () => {
             expect(pending).to.have.length(1);
             expect(pending[0])
                 .to.contain('/xhr?status=200')
-                .and.contain('had no response after 1200 ms');
+                .and.contain(
+                    'was still pending when the wait timed out after 1200 ms'
+                );
         });
     });
 });

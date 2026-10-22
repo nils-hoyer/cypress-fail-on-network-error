@@ -432,7 +432,8 @@ const cancelledMessages = [
     'CDP Fetch request canceled by the browser:',
     // Chrome, when the page that made the request was reset between tests
     'Invalid InterceptionId.',
-    // Firefox, when the page that made the request was reset between tests
+    // Chrome, and reported from Firefox, when the page that made the request
+    // was reset between tests
     'The browser closed the connection before the response completed.',
 ];
 
@@ -454,20 +455,6 @@ export const baseRequestId = (requestId: string): string =>
 export const isRetry = (requestId: string): boolean =>
     baseRequestId(requestId) !== requestId;
 
-// when the browser sent the request (Chrome and Electron), or when Cypress's
-// proxy received it, in ms since the epoch. A time far from now comes from
-// another clock, so it is not used.
-export const requestStartTime = (event: {
-    cdpRequestWillBeSentTimestamp?: number;
-    proxyRequestReceivedTimestamp?: number;
-}): number | undefined => {
-    const time =
-        event.cdpRequestWillBeSentTimestamp ||
-        event.proxyRequestReceivedTimestamp;
-    if (typeof time !== 'number') return undefined;
-    return Math.abs(Date.now() - time) < 60000 ? time : undefined;
-};
-
 export const isPending = (request: RequestSession): boolean =>
     request.status === undefined &&
     request.error === undefined &&
@@ -479,7 +466,7 @@ export const logPendingRequest =
         Cypress.log({
             name: 'pending',
             displayName: 'pending',
-            message: `${escapeMarkdown(`${request.method} ${request.url}`)} had no response after ${timeout} ms`,
+            message: `${escapeMarkdown(`${request.method} ${request.url}`)} was still pending when the wait timed out after ${timeout} ms`,
             consoleProps: () => ({
                 Request: `${request.method} ${request.url}`,
                 Timeout: timeout,

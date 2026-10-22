@@ -28,7 +28,7 @@ An XHR or `fetch` request fails the test when it gets an error response (`400` o
 
 <img src="./docs/commandLog.png" width="450" alt="An unexpected request in the Cypress command log and the failed test's error">
 
-The plugin sees each request as Cypress's proxy does, so a response that the browser then blocks, for example for missing CORS headers, does not fail the test.
+The plugin checks the status that Cypress's proxy sees, so a successful response that the browser then blocks, for example for missing CORS headers, does not fail the test.
 
 ## Configuration
 
