@@ -20,14 +20,33 @@ const specs = readdirSync('cypress/e2e').filter((file) =>
     file.endsWith('.cy.ts')
 );
 
+// Cypress's proxy retries a request without a response, each time with a
+// new id, so check that the message lists the request once
+const expectOneRequest = (error: string, line: RegExp) => {
+    expect(error).to.match(line);
+    expect(error.match(/^[A-Z]+ http/gm)).to.have.length(1);
+};
+
 // checks on the error beyond the plugin prefix, by describe and test title
 const errorChecks: Record<string, (error: string) => void> = {
     'shouldFailOnRequestError > should fail on an XHR without a response': (
         error
-    ) => expect(error).to.match(/^GET http:\/\/\S+\/xhr\?status=none → \S/m),
+    ) => expectOneRequest(error, /^GET http:\/\/\S+\/xhr\?status=none → \S/m),
     'shouldFailOnRequestError > should fail on a fetch without a response': (
         error
-    ) => expect(error).to.match(/^GET http:\/\/\S+\/xhr\?status=none → \S/m),
+    ) => expectOneRequest(error, /^GET http:\/\/\S+\/xhr\?status=none → \S/m),
+    'shouldFailOnRequestError > should fail on a fetch to a port that refuses the connection':
+        (error) =>
+            expectOneRequest(
+                error,
+                /^GET http:\/\/localhost:\d+\/refused → .*ECONNREFUSED/m
+            ),
+    'shouldFailOnRequestError > should fail once on a request that cy.intercept() forces to fail':
+        (error) =>
+            expectOneRequest(
+                error,
+                /^GET http:\/\/\S+\/xhr\?status=200 → forceNetworkError called$/m
+            ),
     // one line per failing request, without internal fields
     'shouldFailOnNetworkRequest > should fail on an XHR that matches no entry':
         (error) =>

@@ -36,13 +36,14 @@ An XHR or `fetch` request fails the test when it gets an error response (`400` o
 | `debug` | `false` | Also logs each request that `ignoreRequests` ignores, with the entry that matched it. See [Debugging](#debugging). |
 
 ```ts
-import failOnNetworkError, { Config } from 'cypress-fail-on-network-error';
+import failOnNetworkError, { type Config } from 'cypress-fail-on-network-error';
 
 const config: Config = {
     ignoreRequests: [
         { status: { from: 100, to: 399 } }, // keep the default
         'analytics', // any request whose URL contains "analytics"
-        { url: '/api/*/avatar', status: 404 }, // a glob
+        { url: '/api/*/avatar*', status: 404 }, // a glob
+        /\/api\/v\d+\/health/, // a RegExp: /api/v1/health, /api/v2/health, …
         { url: '/api/feature-flags', method: 'GET', status: 404 },
         { method: 'POST', status: 409 }, // a 409 from any POST request
         { method: ['HEAD', 'OPTIONS'] }, // any HEAD or OPTIONS request
@@ -56,9 +57,11 @@ failOnNetworkError(config);
 
 ### Matching requests
 
-An entry is an object with any of `url`, `method`, `status` and `predicate`. A string is shorthand for `{ url }`, and a function for `{ predicate }`. A request that matches any entry is ignored. Within an entry, every field it sets must match.
+An entry is an object with any of `url`, `method`, `status` and `predicate`. A string or a `RegExp` is shorthand for `{ url }`, and a function for `{ predicate }`. A request that matches any entry is ignored. Within an entry, every field it sets must match.
 
 - `url` is a `string` or a `RegExp`. A string matches when the URL contains it, such as `'/api/users'`, or as a [glob](https://on.cypress.io/minimatch), as in `cy.intercept()`, such as `'/api/*/users'`. A `RegExp` matches anywhere in the full URL.
+    - Because a string matches when the URL contains it, `'/api/feature-flags'` also matches `/api/feature-flags-v2`. To match only that path, use a `RegExp` such as `/\/api\/feature-flags(\?|$)/`.
+    - A glob must match the query too, so `'/api/*/avatar'` does not match `/api/1/avatar?size=64`, but `'/api/*/avatar*'` does.
 - `method` is an HTTP method, such as `'GET'`, in any case, or a list of methods.
 - `status` is a number, or a range `{ from, to }` that includes both ends. A request without a response, for example when the connection is refused, has no status, so only entries without `status` match it.
 - `predicate` gets the request's `method`, `url`, `requestHeaders`, and `status` and `responseHeaders` or `error`, and ignores the request when it returns `true`. Header names are lower case. Request and response bodies are not available.
@@ -98,7 +101,17 @@ To change `debug` in a test, use `getConfig()` and `setConfig()`, which `failOnN
 ```ts
 const { getConfig, setConfig } = failOnNetwork;
 
-Cypress.Commands.add('setDebug', (debug) => setConfig({ ...getConfig(), debug }));
+Cypress.Commands.add('setDebug', (debug: boolean) => {
+    setConfig({ ...getConfig(), debug });
+});
+
+declare global {
+    namespace Cypress {
+        interface Chainable {
+            setDebug(debug: boolean): Chainable<void>;
+        }
+    }
+}
 ```
 
 ## Waiting for pending requests
@@ -112,7 +125,7 @@ it('should check every request the page makes', () => {
 });
 ```
 
-`cy.waitForRequests(timeout = 10000)` waits until every request of the current test has a response or has failed. When the timeout passes first, the test continues without an error.
+`cy.waitForRequests(timeout = 10000)` waits until every request of the current test has a response or has failed. When the timeout passes first, the test continues without an error, and each request that is still pending is logged as `pending`.
 
 ## Debugging
 

@@ -5,7 +5,7 @@
 export const prefix = 'cypress-fail-on-network-error:';
 
 export type Config = {
-    ignoreRequests?: (string | RequestMatcher | RequestPredicate)[];
+    ignoreRequests?: IgnoredRequest[];
     // also log each ignored request, with the entry that ignored it
     debug?: boolean;
 };
@@ -52,8 +52,10 @@ export type NormalizedConfig = {
     debug: boolean;
 };
 
-// an entry of ignoreRequests as the config accepts it
-export type IgnoredRequest = string | RequestMatcher | RequestPredicate;
+// an entry of ignoreRequests as the config accepts it: a string or a RegExp
+// is shorthand for { url }, a function for { predicate }
+export type IgnoredRequest =
+    string | RegExp | RequestMatcher | RequestPredicate;
 
 const configKeys = ['ignoreRequests', 'debug'];
 // options that were renamed, with their new name
@@ -70,6 +72,10 @@ const typeName = (value: unknown): string => {
     if (typeof value !== 'object') return typeof value;
     return Object.prototype.toString.call(value).slice(8, -1);
 };
+
+// by type name, like validateConfig, rather than instanceof
+const isRegExp = (value: unknown): value is RegExp =>
+    typeName(value) === 'RegExp';
 
 const expectType = (value: unknown, types: string[], message: string) => {
     if (types.indexOf(typeName(value)) === -1)
@@ -105,12 +111,12 @@ const validateRequests = (requests: unknown, key: string): void => {
         const name = `${key}[${index}]`;
         expectType(
             _request,
-            ['string', 'Object', 'function'],
-            `${name} must be a string, an object or a function`
+            ['string', 'RegExp', 'Object', 'function'],
+            `${name} must be a string, a RegExp, an object or a function`
         );
 
         const request = (
-            typeof _request === 'string'
+            typeof _request === 'string' || isRegExp(_request)
                 ? { url: _request }
                 : typeof _request === 'function'
                   ? { predicate: _request }
@@ -139,10 +145,7 @@ const validateRequests = (requests: unknown, key: string): void => {
             `${name}.url must be a string or a RegExp`
         );
         // new RegExp('') and /(?:)/ match every URL, like an empty url string
-        if (
-            typeName(request.url) === 'RegExp' &&
-            (request.url as RegExp).source === '(?:)'
-        )
+        if (isRegExp(request.url) && request.url.source === '(?:)')
             throw invalid(
                 `${name}.url must not be an empty RegExp, or it matches every request`
             );
@@ -208,15 +211,24 @@ export const createConfig = (config: Config): NormalizedConfig => ({
 });
 
 export const mapToRequests = (
-    _unknowns: (string | RequestMatcher | RequestPredicate)[]
+    _unknowns: IgnoredRequest[]
 ): NormalizedRequest[] =>
-    _unknowns.map((unknown: string | RequestMatcher | RequestPredicate) => {
+    _unknowns.map((unknown: IgnoredRequest) => {
         if (typeof unknown === 'function') {
             return {
                 url: undefined,
                 method: undefined,
                 status: undefined,
                 predicate: unknown,
+            };
+        }
+
+        if (isRegExp(unknown)) {
+            return {
+                url: unknown,
+                method: undefined,
+                status: undefined,
+                predicate: undefined,
             };
         }
 
@@ -413,10 +425,53 @@ export const lowerCaseNames = (
     return lowerCased;
 };
 
-// Chrome reports a request that the page aborted, or that a navigation
-// cancelled, as a request:error with this message (seen with Cypress 16.1.1)
+// the start of request:error messages for a request that the browser gave
+// up on, not one that failed (seen with Cypress 16.1.1)
+const cancelledMessages = [
+    // Chrome, when the page aborts a request or navigates away
+    'CDP Fetch request canceled by the browser:',
+    // Chrome, when the page that made the request was reset between tests
+    'Invalid InterceptionId.',
+    // Chrome, and reported from Firefox, when the page that made the request
+    // was reset between tests
+    'The browser closed the connection before the response completed.',
+];
+
 export const isCancelledByBrowser = (message: string | undefined): boolean =>
-    message?.indexOf('CDP Fetch request canceled by the browser:') === 0;
+    cancelledMessages.some((start) => message?.indexOf(start) === 0);
+
+// Node reports a refused connection as an AggregateError without a message,
+// with the code ECONNREFUSED
+export const errorMessage = (
+    error: { message?: string; code?: string } | undefined
+): string =>
+    error?.message || error?.code || 'request failed without a response';
+
+// Cypress's proxy retries a request without a response under the same id
+// with a -retry-N suffix
+export const baseRequestId = (requestId: string): string =>
+    requestId.replace(/-retry-\d+$/, '');
+
+export const isRetry = (requestId: string): boolean =>
+    baseRequestId(requestId) !== requestId;
+
+export const isPending = (request: RequestSession): boolean =>
+    request.status === undefined &&
+    request.error === undefined &&
+    request.cancelled !== true;
+
+// waitForRequests timed out: says which requests it was waiting for
+export const logPendingRequest =
+    (timeout: number) => (request: RequestSession) =>
+        Cypress.log({
+            name: 'pending',
+            displayName: 'pending',
+            message: `${escapeMarkdown(`${request.method} ${request.url}`)} was still pending when the wait timed out after ${timeout} ms`,
+            consoleProps: () => ({
+                Request: `${request.method} ${request.url}`,
+                Timeout: timeout,
+            }),
+        });
 
 export const waitUntil = (
     predicate: () => boolean,

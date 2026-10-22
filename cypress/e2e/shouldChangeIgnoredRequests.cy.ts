@@ -11,6 +11,12 @@ describe('shouldChangeIgnoredRequests', () => {
         cy.waitForRequests();
     });
 
+    it('should pass on a response that an added RegExp entry excludes', () => {
+        cy.addIgnoredRequests([/status=503/]);
+        cy.fetch('/xhr?status=503');
+        cy.waitForRequests();
+    });
+
     it('should fail on a response whose entry was deleted', () => {
         cy.deleteIgnoredRequests([{ status: { from: 200, to: 399 } }]);
         cy.fetch('/xhr?status=200');

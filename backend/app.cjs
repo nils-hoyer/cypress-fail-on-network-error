@@ -21,6 +21,28 @@ app.all('/xhr', (request, response) => {
     }, delay);
 });
 
+// a port on which nothing listens, so a request to it is refused
+app.get('/closed-port', (request, response) => {
+    const server = require('net').createServer();
+    server.listen(0, () => {
+        const { port } = server.address();
+        server.close(() => response.json({ port }));
+    });
+});
+
+// a page that fetches /xhr with status and delay as soon as it loads
+app.get('/fetch-on-load', (request, response) => {
+    const { status = 200, delay = 0 } = request.query;
+    const url = `/xhr?status=${encodeURIComponent(status)}&delay=${encodeURIComponent(delay)}`;
+    response.set('Content-Type', 'text/html').send(`<html>
+    <body>
+        <script>
+            fetch(${JSON.stringify(url)}).catch(() => {});
+        </script>
+    </body>
+</html>`);
+});
+
 // a page that loads a script, a stylesheet and an image, and makes one XHR
 app.get('/resources', (request, response) => {
     response.set('Content-Type', 'text/html').send(`<html>
