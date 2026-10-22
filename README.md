@@ -44,8 +44,8 @@ const config: Config = {
     ignoreRequests: [
         { status: { from: 100, to: 399 } }, // keep the default
         'analytics', // any request whose URL contains "analytics"
-        /\/api\/health(\?|$)/, // a RegExp, here for /api/health only
         { url: '/api/*/avatar*', status: 404 }, // a glob
+        /\/api\/v\d+\/health/, // a RegExp: /api/v1/health, /api/v2/health, …
         { url: '/api/feature-flags', method: 'GET', status: 404 },
         { method: 'POST', status: 409 }, // a 409 from any POST request
         { method: ['HEAD', 'OPTIONS'] }, // any HEAD or OPTIONS request
