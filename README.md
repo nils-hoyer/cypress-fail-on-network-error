@@ -24,12 +24,6 @@ import failOnNetworkError from 'cypress-fail-on-network-error';
 failOnNetworkError();
 ```
 
-In a CommonJS support file, use the `default` export:
-
-```js
-const failOnNetworkError = require('cypress-fail-on-network-error').default;
-```
-
 An XHR or `fetch` request fails the test when it gets an error response (`400` or higher) or no response at all. It is logged to the command log:
 
 <img src="./docs/commandLog.png" width="450" alt="An unexpected request in the Cypress command log and the failed test's error">
@@ -96,19 +90,6 @@ it('should tolerate an unavailable recommendations service', () => {
 });
 ```
 
-A response that `cy.intercept()` stubs is checked like any other, so a test that stubs an error to check the error page ignores it too:
-
-```ts
-it('should show an error when the cart fails to load', () => {
-    cy.intercept('/api/cart', { statusCode: 500 });
-    cy.addIgnoredRequests([{ url: '/api/cart', status: 500 }]);
-    cy.visit('/cart');
-    cy.contains('Your cart could not be loaded');
-});
-```
-
-With `forceNetworkError: true` the request gets no response, so leave out `status`: `cy.addIgnoredRequests(['/api/cart'])`.
-
 | Command                                    | Description |
 | ------------------------------------------ | ----------- |
 | `cy.getIgnoredRequests()`                  | Yields `ignoreRequests`. |
@@ -147,9 +128,6 @@ it('should check every request the page makes', () => {
 ```
 
 `cy.waitForRequests(timeout = 10000)` waits until every request of the current test has a response or has failed. When the timeout passes first, the test continues without an error, and each request that is still pending is logged as `pending`.
-
-- In Electron and Firefox, a request that the app aborts, for example with an `AbortController`, never reports back, so `cy.waitForRequests()` waits for it until the timeout. Chrome reports it right away.
-- It waits only for requests that have started. A request that the app makes later, such as the next poll, is checked only when it fails before the test's last command ends.
 
 ## Debugging
 
