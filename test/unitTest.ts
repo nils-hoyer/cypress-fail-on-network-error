@@ -5,6 +5,7 @@ import * as index from './../dist/index.js';
 import failOnNetworkError, {
     addIgnoredRequestsCommands,
     type Config,
+    type IgnoredRequest,
     type RequestMatcher,
     type RequestSession,
 } from './../dist/index.js';
@@ -67,6 +68,21 @@ const requestError = (requestId: string, message: string) =>
     emit('request:event', 'request:error', {
         requestId,
         error: { message },
+    });
+
+// the times Cypress sends with incoming:request, in ms since the epoch
+const incomingRequestAt = (
+    requestId: string,
+    timestamps: {
+        cdpRequestWillBeSentTimestamp?: number;
+        proxyRequestReceivedTimestamp?: number;
+    }
+) =>
+    emit('request:event', 'incoming:request', {
+        requestId,
+        method: 'GET',
+        url: 'http://foo',
+        ...timestamps,
     });
 
 // the message Chrome reports when the page aborts a request or navigates away
@@ -359,6 +375,139 @@ describe('request:event handler', () => {
                 'proxy error: CDP Fetch request canceled by the browser'
             )
         );
+    });
+
+    [
+        'Invalid InterceptionId.',
+        'The browser closed the connection before the response completed.',
+    ].forEach((message) => {
+        it(`WHEN request error is "${message}" THEN expect no error`, () => {
+            failOnNetworkError();
+
+            incomingRequest('1', 'GET', 'http://foo');
+
+            expectNoFailure(() => requestError('1', message));
+        });
+    });
+
+    it('WHEN request error has no message but a code THEN expect the code in the message', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+
+        // how Electron and Firefox report a refused connection
+        expectFailureAtCommandEnd(() =>
+            emit('request:event', 'request:error', {
+                requestId: '1',
+                error: {
+                    name: 'AggregateError',
+                    message: '',
+                    code: 'ECONNREFUSED',
+                },
+            })
+        ).that.contains('GET http://foo → ECONNREFUSED');
+    });
+
+    it('WHEN request error has neither message nor code THEN expect the fallback in the message', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+
+        expectFailureAtCommandEnd(() =>
+            emit('request:event', 'request:error', {
+                requestId: '1',
+                error: { message: '' },
+            })
+        ).that.contains('GET http://foo → request failed without a response');
+    });
+
+    it('WHEN the proxy retries a request without a response THEN expect one line for it', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        requestError('1', 'socket hang up');
+        incomingRequest('1-retry-1', 'GET', 'http://foo');
+        requestError('1-retry-1', 'socket hang up');
+        incomingRequest('1-retry-2', 'GET', 'http://foo');
+
+        expectFailureAtCommandEnd(() =>
+            requestError('1-retry-2', 'socket hang up')
+        ).that.equals(
+            'cypress-fail-on-network-error:\nGET http://foo → socket hang up'
+        );
+    });
+
+    it('WHEN a retry of a failed request gets a response THEN expect no error', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        requestError('1', 'socket hang up');
+        incomingRequest('1-retry-1', 'GET', 'http://foo');
+
+        expectNoFailure(() => responseReceived('1-retry-1', 200));
+    });
+
+    it('WHEN a retry of a request that is not tracked fails THEN expect it to be ignored', () => {
+        failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo', 'script');
+        incomingRequest('1-retry-1', 'GET', 'http://foo');
+
+        expectNoFailure(() => requestError('1-retry-1', 'socket hang up'));
+    });
+
+    it('WHEN a request arrives after test:after:run but started before it THEN expect it to be ignored', () => {
+        failOnNetworkError();
+
+        const startedAt = Date.now() - 50;
+        testAfterRun();
+        incomingRequestAt('1', { proxyRequestReceivedTimestamp: startedAt });
+
+        expectNoFailure(() => requestError('1', 'socket hang up'));
+    });
+
+    it('WHEN the browser sent a request before test:after:run that the proxy received after it THEN expect it to be ignored', () => {
+        failOnNetworkError();
+
+        const startedAt = Date.now() - 50;
+        testAfterRun();
+        incomingRequestAt('1', {
+            cdpRequestWillBeSentTimestamp: startedAt,
+            proxyRequestReceivedTimestamp: Date.now() + 5,
+        });
+
+        expectNoFailure(() => responseReceived('1', 500));
+    });
+
+    it('WHEN a request started after test:after:run THEN expect it to be checked', () => {
+        failOnNetworkError();
+
+        testAfterRun();
+        // Firefox sends 0 for the browser's time
+        incomingRequestAt('1', {
+            cdpRequestWillBeSentTimestamp: 0,
+            proxyRequestReceivedTimestamp: Date.now() + 5,
+        });
+
+        expectFailureAtCommandEnd(() => responseReceived('1', 500));
+    });
+
+    it('WHEN a request started before the first test ended THEN expect it to be checked', () => {
+        failOnNetworkError();
+
+        incomingRequestAt('1', { proxyRequestReceivedTimestamp: Date.now() });
+
+        expectFailureAtCommandEnd(() => responseReceived('1', 500));
+    });
+
+    it('WHEN the start time is far from now THEN expect it to be checked', () => {
+        failOnNetworkError();
+
+        testAfterRun();
+        // a clock that does not count ms since the epoch
+        incomingRequestAt('1', { cdpRequestWillBeSentTimestamp: 12345 });
+
+        expectFailureAtCommandEnd(() => responseReceived('1', 500));
     });
 
     it('WHEN page unloads with a request pending THEN expect a later response to be checked', () => {
@@ -929,6 +1078,42 @@ describe('waitForRequests()', function () {
         expectElapsed(start, 1200, 1400);
     });
 
+    it('WHEN requests are still pending at the timeout THEN expect each to be logged as pending', async () => {
+        const { waitForRequests } = failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo/*');
+        incomingRequest('2', 'POST', 'http://bar');
+        incomingRequest('3', 'GET', 'http://done');
+        responseReceived('3', 200);
+        waitForRequests(600);
+
+        await runCommands();
+        chai.expect(logs).to.have.length(2);
+        chai.expect(logs[0]).to.include({
+            name: 'pending',
+            displayName: 'pending',
+            message: 'GET http://foo/\\* had no response after 600 ms',
+        });
+        chai.expect(logs[0].consoleProps()).to.deep.equal({
+            Request: 'GET http://foo/*',
+            Timeout: 600,
+        });
+        chai.expect(logs[1].message).to.equal(
+            'POST http://bar had no response after 600 ms'
+        );
+    });
+
+    it('WHEN every request is done before the timeout THEN expect nothing to be logged', async () => {
+        const { waitForRequests } = failOnNetworkError();
+
+        incomingRequest('1', 'GET', 'http://foo');
+        responseReceived('1', 200);
+        waitForRequests(2000);
+
+        await runCommands();
+        chai.expect(logs).to.be.empty;
+    });
+
     it('WHEN request is made after waitForRequests is called THEN expect it to wait for that request', async () => {
         const { waitForRequests } = failOnNetworkError({
             ignoreRequests: ['foo'],
@@ -982,6 +1167,19 @@ describe('test:after:run handler', () => {
 });
 
 describe('types', () => {
+    it('WHEN entries are typed as IgnoredRequest THEN expect every shape to compile', () => {
+        const entries: IgnoredRequest[] = [
+            'foo',
+            /foo/,
+            { url: 'foo', status: 404 },
+            (request) => request.status === 404,
+        ];
+
+        chai.expect(() =>
+            validateConfig({ ignoreRequests: entries })
+        ).to.not.throw();
+    });
+
     it('WHEN an entry is a function or sets predicate THEN expect it to compile', () => {
         const config: Config = {
             ignoreRequests: [
@@ -1259,7 +1457,7 @@ describe('validateConfig()', () => {
         });
     });
 
-    [42, /foo/, null, ['foo']].forEach((entry) => {
+    [42, true, null, ['foo']].forEach((entry) => {
         it(`WHEN entry is ${String(entry)} THEN expect error naming the entry`, () => {
             expectInvalid(
                 { ignoreRequests: ['foo', entry] },
@@ -1296,6 +1494,7 @@ describe('validateConfig()', () => {
             { url: new RegExp(''), status: 500 },
             "{ url: new RegExp(''), status: 500 }",
         ],
+        [/(?:)/, '/(?:)/'],
     ].forEach(([entry, title]) => {
         it(`WHEN url of entry ${title} is an empty RegExp THEN expect error naming the entry and key`, () => {
             expectInvalid(
@@ -1303,6 +1502,12 @@ describe('validateConfig()', () => {
                 'config.ignoreRequests[1].url'
             );
         });
+    });
+
+    it('WHEN entry is a RegExp THEN expect no error', () => {
+        chai.expect(() =>
+            validateConfig({ ignoreRequests: [/foo/] })
+        ).to.not.throw();
     });
 
     it('WHEN entry sets only predicate THEN expect no error', () => {
@@ -1357,11 +1562,11 @@ describe('validateConfig()', () => {
         ],
         [
             { ignoreRequests: [42] },
-            'must be a string, an object or a function, got number',
+            'must be a string, a RegExp, an object or a function, got number',
         ],
         [
-            { ignoreRequests: [/foo/] },
-            'must be a string, an object or a function, got RegExp',
+            { ignoreRequests: [new Date()] },
+            'must be a string, a RegExp, an object or a function, got Date',
         ],
         [
             { ignoreRequests: [{ url: () => true }] },
@@ -1465,6 +1670,18 @@ describe('mapToRequests()', () => {
                 url: undefined,
                 status: undefined,
                 method: 'GET',
+                predicate: undefined,
+            },
+        ]);
+    });
+    it('WHEN entry is a RegExp THEN expect it as url', () => {
+        const url = /foo/;
+
+        chai.expect(mapToRequests([url])).to.deep.equal([
+            {
+                url,
+                method: undefined,
+                status: undefined,
                 predicate: undefined,
             },
         ]);

@@ -1,14 +1,20 @@
 import {
+    baseRequestId,
     createConfig,
+    errorMessage,
     findIgnoringEntry,
     findRequest,
     invalid,
     isCancelledByBrowser,
+    isPending,
+    isRetry,
     isSameEntry,
     logCheckedRequest,
+    logPendingRequest,
     lowerCaseNames,
     mapToRequests,
     prefix,
+    requestStartTime,
     requestToString,
     validateConfig,
     waitUntil,
@@ -22,6 +28,7 @@ import {
 
 export type {
     Config,
+    IgnoredRequest,
     Method,
     NormalizedConfig,
     NormalizedRequest,
@@ -70,6 +77,8 @@ export default function failOnNetworkError(_config: Config = {}) {
     let checkedRequests: CheckedRequest[] = [];
     // set when a predicate threw, until the next command:end throws
     let predicateError: Error | undefined;
+    // when the last test:after:run cleared the requests
+    let previousTestEndedAt: number | undefined;
 
     const getRequests = () => requests;
 
@@ -82,20 +91,17 @@ export default function failOnNetworkError(_config: Config = {}) {
     };
 
     const waitForRequests = (timeout = 10000): Cypress.Chainable<any> => {
-        const requestsDone = () =>
-            getRequests().every(
-                (request: RequestSession) =>
-                    request.status !== undefined ||
-                    request.error !== undefined ||
-                    request.cancelled === true
-            );
+        const pendingRequests = () => getRequests().filter(isPending);
 
         // create the promise when the command runs, not when it is queued,
         // and give Cypress's command timeout slack beyond our own timeout
         return cy
             .wrap(null, { log: false })
             .then({ timeout: timeout + 1000 }, () =>
-                waitUntil(requestsDone, timeout)
+                waitUntil(() => pendingRequests().length === 0, timeout).then(
+                    // the test continues, so say what it waited for
+                    () => pendingRequests().forEach(logPendingRequest(timeout))
+                )
             );
     };
 
@@ -120,20 +126,44 @@ export default function failOnNetworkError(_config: Config = {}) {
             const checkedResourceTypes = ['xhr', 'fetch', undefined];
             if (checkedResourceTypes.indexOf(event.resourceType) === -1) return;
 
-            requests.push({
-                requestId: event.requestId,
+            // the page made the request before the previous test ended, and
+            // test isolation reset the page, but the event arrived late
+            const startedAt = requestStartTime(event);
+            if (
+                startedAt !== undefined &&
+                previousTestEndedAt !== undefined &&
+                startedAt < previousTestEndedAt
+            )
+                return;
+
+            const requestId = baseRequestId(event.requestId);
+            const request: RequestSession = {
+                requestId,
                 method: event.method,
                 url: event.url,
                 requestHeaders: lowerCaseNames(event.headers),
                 status: undefined,
-            });
+            };
+            if (isRetry(event.requestId)) {
+                // a retry of a request that is not tracked is not tracked either
+                if (findRequest(requests, requestId) === undefined) return;
+                // the earlier attempt's error is replaced by this one's result
+                requests = requests.map((each: RequestSession) =>
+                    each.requestId === requestId ? request : each
+                );
+                checkedRequests = checkedRequests.filter(
+                    (checked) => checked.request.requestId !== requestId
+                );
+                return;
+            }
+            requests.push(request);
             return;
         }
 
         const subscribedEvents = ['request:error', 'response:received'];
+        const requestId = baseRequestId(event.requestId);
         // a request from an earlier test was cleared by test:after:run
-        const unknownRequest =
-            findRequest(requests, event.requestId) === undefined;
+        const unknownRequest = findRequest(requests, requestId) === undefined;
 
         if (subscribedEvents.indexOf(eventName) === -1 || unknownRequest)
             return;
@@ -144,7 +174,7 @@ export default function failOnNetworkError(_config: Config = {}) {
             isCancelledByBrowser(event.error?.message)
         ) {
             requests = requests.map((request: RequestSession) =>
-                request.requestId === event.requestId
+                request.requestId === requestId
                     ? { ...request, cancelled: true }
                     : request
             );
@@ -152,25 +182,17 @@ export default function failOnNetworkError(_config: Config = {}) {
         }
 
         requests = requests.map((request: RequestSession) => {
-            if (request.requestId !== event.requestId) return request;
+            if (request.requestId !== requestId) return request;
             return eventName === 'response:received'
                 ? {
                       ...request,
                       status: event.status,
                       responseHeaders: lowerCaseNames(event.headers),
                   }
-                : {
-                      ...request,
-                      error:
-                          event.error?.message ??
-                          'request failed without a response',
-                  };
+                : { ...request, error: errorMessage(event.error) };
         });
 
-        const request = findRequest(
-            requests,
-            event.requestId
-        ) as RequestSession;
+        const request = findRequest(requests, requestId) as RequestSession;
         try {
             const entries = getConfig().ignoreRequests;
             const ignoredBy = findIgnoringEntry(request, getConfig());
@@ -224,6 +246,7 @@ export default function failOnNetworkError(_config: Config = {}) {
     Cypress.on('test:after:run', () => {
         if (!isActive()) return;
         setConfig(originConfig);
+        previousTestEndedAt = Date.now();
         requests = [];
         checkedRequests = [];
         predicateError = undefined;

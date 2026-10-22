@@ -1,6 +1,6 @@
 import failOnNetworkError, {
     addIgnoredRequestsCommands,
-    Config,
+    type Config,
 } from '../../dist/index';
 
 const config: Config = {
